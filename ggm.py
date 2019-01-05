@@ -10,73 +10,41 @@ N_bond_features = 5
 N_extra_atom_features = 5
 N_extra_bond_features = 6
 
-size_of_node_vector = 128
-size_of_edge_vector = 128
-
-size_of_graph_vector = size_of_node_vector*2
+#size_of_node_vector = 128
+#size_of_edge_vector = 128
+#size_of_graph_vector = size_of_node_vector*2
 
 
 class ggm(torch.nn.Module):
-    def __init__(self):
+    def __init__(self, args):
         super(ggm, self).__init__()
-        #self.R = nn.Linear(150, 12size_of_node_vector)
-        self.enc_U1 = nn.Linear(2*size_of_node_vector+size_of_edge_vector+4, size_of_node_vector)
-        self.enc_U2 = nn.Linear(2*size_of_node_vector+size_of_edge_vector+4, size_of_node_vector)
-        self.enc_U3 = nn.Linear(2*size_of_node_vector+size_of_edge_vector+4, size_of_node_vector)
-        self.enc_C1 = nn.GRUCell(size_of_node_vector, size_of_node_vector)
-        self.enc_C2 = nn.GRUCell(size_of_node_vector, size_of_node_vector)
-        self.enc_C3 = nn.GRUCell(size_of_node_vector, size_of_node_vector)
         
-        self.init_scaffold_U1 = nn.Linear(2*size_of_node_vector+size_of_edge_vector, size_of_node_vector)
-        self.init_scaffold_U2 = nn.Linear(2*size_of_node_vector+size_of_edge_vector, size_of_node_vector)
-        self.init_scaffold_U3 = nn.Linear(2*size_of_node_vector+size_of_edge_vector, size_of_node_vector)
-        self.init_scaffold_C1 = nn.GRUCell(size_of_node_vector, size_of_node_vector)
-        self.init_scaffold_C2 = nn.GRUCell(size_of_node_vector, size_of_node_vector)
-        self.init_scaffold_C3 = nn.GRUCell(size_of_node_vector, size_of_node_vector)
+        size_of_node_vector = args.size_of_node_vector
+        size_of_edge_vector = args.size_of_edge_vector
+        size_of_graph_vector = size_of_node_vector*2
         
-        #self.prop_U1 = nn.Linear(3*size_of_node_vector+size_of_edge_vector, size_of_node_vector)
-        #self.prop_U2 = nn.Linear(3*size_of_node_vector+size_of_edge_vector, size_of_node_vector)
-        #self.prop_U3 = nn.Linear(3*size_of_node_vector+size_of_edge_vector, size_of_node_vector)
-        #self.prop_C1 = nn.GRUCell(size_of_node_vector, size_of_node_vector)
-        #self.prop_C2 = nn.GRUCell(size_of_node_vector, size_of_node_vector)
-        #self.prop_C3 = nn.GRUCell(size_of_node_vector, size_of_node_vector)
+        self.enc_U = nn.ModuleList([nn.Linear(2*size_of_node_vector+size_of_edge_vector+4, size_of_node_vector) for k in range(3)])
+        self.enc_C = nn.ModuleList([nn.GRUCell(size_of_node_vector, size_of_node_vector) for k in range(3)])
         
-        self.prop_add_node_U1 = nn.Linear(3*size_of_node_vector+size_of_edge_vector+4, size_of_node_vector)
-        self.prop_add_node_U2 = nn.Linear(3*size_of_node_vector+size_of_edge_vector+4, size_of_node_vector)
-        #self.prop_add_node_U3 = nn.Linear(2*size_of_node_vector+size_of_edge_vector, size_of_node_vector)
-        self.prop_add_node_C1 = nn.GRUCell(size_of_node_vector, size_of_node_vector)
-        self.prop_add_node_C2 = nn.GRUCell(size_of_node_vector, size_of_node_vector)
-        #self.prop_add_node_C3 = nn.GRUCell(size_of_node_vector, size_of_node_vector)
+        self.init_scaffold_U = nn.ModuleList([nn.Linear(2*size_of_node_vector+size_of_edge_vector, size_of_node_vector) for k in range(3)])
+        self.init_scaffold_C = nn.ModuleList([nn.GRUCell(size_of_node_vector, size_of_node_vector) for k in range(3)])
         
-        self.prop_add_edge_U1 = nn.Linear(3*size_of_node_vector+size_of_edge_vector+4, size_of_node_vector)
-        self.prop_add_edge_U2 = nn.Linear(3*size_of_node_vector+size_of_edge_vector+4, size_of_node_vector)
-        #self.prop_add_edge_U3 = nn.Linear(2*size_of_node_vector+size_of_edge_vector, size_of_node_vector)
-        self.prop_add_edge_C1 = nn.GRUCell(size_of_node_vector, size_of_node_vector)
-        self.prop_add_edge_C2 = nn.GRUCell(size_of_node_vector, size_of_node_vector)
-        #self.prop_add_edge_C3 = nn.GRUCell(size_of_node_vector, size_of_node_vector)
+        self.prop_add_node_U = nn.ModuleList([nn.Linear(3*size_of_node_vector+size_of_edge_vector+4, size_of_node_vector) for k in range(2)])
+        self.prop_add_node_C = nn.ModuleList([nn.GRUCell(size_of_node_vector, size_of_node_vector) for k in range(2)])
         
-        self.prop_select_node_U1 = nn.Linear(3*size_of_node_vector+size_of_edge_vector+4, size_of_node_vector)
-        self.prop_select_node_U2 = nn.Linear(3*size_of_node_vector+size_of_edge_vector+4, size_of_node_vector)
-        #self.prop_select_node_U3 = nn.Linear(2*size_of_node_vector+size_of_edge_vector, size_of_node_vector)
-        self.prop_select_node_C1 = nn.GRUCell(size_of_node_vector, size_of_node_vector)
-        self.prop_select_node_C2 = nn.GRUCell(size_of_node_vector, size_of_node_vector)
-        #self.prop_select_node_C3 = nn.GRUCell(size_of_node_vector, size_of_node_vector)
+        self.prop_add_edge_U = nn.ModuleList([nn.Linear(3*size_of_node_vector+size_of_edge_vector+4, size_of_node_vector) for k in range(2)])
+        self.prop_add_edge_C = nn.ModuleList([nn.GRUCell(size_of_node_vector, size_of_node_vector) for k in range(2)])
         
-        self.prop_select_isomer_U1 = nn.Linear(3*size_of_node_vector+size_of_edge_vector+4, size_of_node_vector)
-        self.prop_select_isomer_U2 = nn.Linear(3*size_of_node_vector+size_of_edge_vector+4, size_of_node_vector)
-        #self.prop_select_node_U3 = nn.Linear(2*size_of_node_vector+size_of_edge_vector, size_of_node_vector)
-        self.prop_select_isomer_C1 = nn.GRUCell(size_of_node_vector, size_of_node_vector)
-        self.prop_select_isomer_C2 = nn.GRUCell(size_of_node_vector, size_of_node_vector)
-
-        #self.predict_root1 = nn.Linear(size_of_node_vector*2, 128)
-        #self.predict_root2 = nn.Linear(128, 128)
-        #self.predict_root3 = nn.Linear(128, N_atom_features)
-
+        self.prop_select_node_U = nn.ModuleList([nn.Linear(3*size_of_node_vector+size_of_edge_vector+4, size_of_node_vector) for k in range(2)])
+        self.prop_select_node_C = nn.ModuleList([nn.GRUCell(size_of_node_vector, size_of_node_vector) for k in range(2)])
+        
+        self.prop_select_isomer_U = nn.ModuleList([nn.Linear(3*size_of_node_vector+size_of_edge_vector+4, size_of_node_vector) for k in range(2)])
+        self.prop_select_isomer_C = nn.ModuleList([nn.GRUCell(size_of_node_vector, size_of_node_vector) for k in range(2)])
+        
         self.add_node1 = nn.Linear(size_of_graph_vector+size_of_node_vector+4, 128)
         self.add_node2 = nn.Linear(128, 128)
         self.add_node3 = nn.Linear(128, N_atom_features)
 
-        
         self.add_edge1 = nn.Linear(size_of_graph_vector+size_of_node_vector+4, 128)
         self.add_edge2 = nn.Linear(128, 128)
         self.add_edge3 = nn.Linear(128, N_bond_features)
@@ -111,62 +79,65 @@ class ggm(torch.nn.Module):
         
         self.mean = nn.Linear(size_of_node_vector, size_of_node_vector)
         self.logvar = nn.Linear(size_of_node_vector, size_of_node_vector)
-        self.count_mpnn = 0
 
     def forward(self, s1, s2, condition1, condition2, beta1 = 0.005):
+        #make graph of moleculea and scaffold. *_save means this graph will not be changed
         g_save, h_save, scaffold_g_save, scaffold_h_save = make_graphs(s1, s2)
         if g_save is None and h_save is None:
             return None
+
+        #make same graph of moleculea and scaffold as above. this graph can be changed
         g, h, scaffold_g, scaffold_h = make_graphs(s1, s2, extra_atom_feature=True, extra_bond_feature=True)
-        #g, h = make_graph(s1)
         
+        #collect losses
         add_node_losses = []
         add_edge_losses = []
         select_node_losses = []
         
+        #embede node state of graph
         self.embede_graph(g, h)
         self.embede_graph(scaffold_g, scaffold_h)
 
-        #g, h = index_rearrange(s1, s2, g, h)
-        #g_save, h_save, = index_rearrange(s1, s2, g_save, h_save)
-        
-        #print (g_save[9])
-        #print ()
-        #print (scaffold_g_save[9])
+        #from numpy to torch tensor
         condition = create_var(torch.from_numpy(np.array(condition1+condition2)).float().unsqueeze(0))
+
+        #encode node state of graph
         self.encode(g, h, condition)
+
+        #make one vector representing graph using all node vectors 
         encoded_vector = self.cal_encoded_vector(h)
+
+        #reparameterization trick. this routine is needed for VAE.
         latent_vector, mu, logvar = self.reparameterize(encoded_vector)
         latent_vector_with_condition = torch.cat([latent_vector, condition], -1)
          
+        #encode node state of scaffold graph
         self.init_scaffold_state(scaffold_g, scaffold_h)
-        #c = self.predict_property(torch.cat([latent_vector, average_node_state(scaffold_h)], 1))
-        #new_node = self.predict_root(latent_vector)
-        #add_node_losses.append((h_save[0]-new_node).pow(2).sum())
-        
-        #scaffold_h_save[0] = h_save[0]
-        #scaffold_h[0] = self.init_node_state(scaffold_h, scaffold_h_save[0])
-        #order = [i for i in range(1, 10)]
 
+        #check which node is included in scaffold and which node is not
         leaves = [i for i in h_save.keys() if i not in scaffold_h.keys()]
-        #if len(leaves)==0:
-        #    return None
         for idx in leaves:
+            #determine which node should be added and calculate the loss
             new_node = self.add_node(scaffold_g, scaffold_h, latent_vector_with_condition)
             add_node_losses.append((h_save[idx]-new_node).pow(2).sum())
-            #print ('\tnode', idx, (h_save[idx]-new_node).pow(2).sum().data.cpu().numpy()[0])
+            
+            #add new node to the graph and initialize the new node state
             scaffold_h_save[idx] = h_save[idx]
             scaffold_h[idx] = self.init_node_state(scaffold_h, scaffold_h_save[idx])
+
+            #find the edge which is connected to the new node
             edge_list = [e for e in g_save[idx] if e[1] in list(scaffold_h.keys())]
             
             for edge in edge_list:
+                #determin which edge type is added and calculate the corresponding loss
                 new_edge = self.add_edge(scaffold_g, scaffold_h, latent_vector_with_condition)
                 add_edge_losses.append((edge[0]-new_edge).pow(2).sum())
-                #print ('\tedge', idx,(edge[0]-new_edge).pow(2).sum().data.cpu().numpy()[0] )
                 target = create_var(one_hot(torch.FloatTensor([list(scaffold_h.keys()).index(edge[1])]),len(scaffold_h)-1 ))
+                #determin which node is connected through seleccted edge and calculate the corresponding loss
                 selected_node = self.select_node(scaffold_g, scaffold_h, latent_vector_with_condition).view(target.size())
                 select_node_losses.append((target-selected_node).pow(2).sum())
-                #print ('\tselect', idx,(target-selected_node).pow(2).sum().data.cpu().numpy()[0] )
+                
+                #add edge to the graph and initialize the new node state
                 if idx not in scaffold_g_save:
                     scaffold_g_save[idx]=[]
                     scaffold_g[idx]=[]
@@ -178,16 +149,18 @@ class ggm(torch.nn.Module):
                     scaffold_g[edge[1]]=[]
                 scaffold_g_save[edge[1]].append((edge[0], idx))
                 scaffold_g[edge[1]].append(( self.init_edge_state(scaffold_h, edge[0]), idx))
+
+            #the edge should not be added more. calculate the corresponding loss
             new_edge = self.add_edge(scaffold_g, scaffold_h, latent_vector_with_condition)
             end_add_edge = create_var(one_hot(torch.FloatTensor([4]),5 ))
             add_edge_losses.append((end_add_edge-new_edge).pow(2).sum())
 
-
-
+        #the node should not be added more. calculate the corresponding loss
         new_node = self.add_node(scaffold_g, scaffold_h, latent_vector_with_condition)
         end_add_node = create_var(one_hot(torch.FloatTensor([8]),9 ))
         add_node_losses.append((end_add_node-new_node).pow(2).sum())
         
+        #convert list to the torch tensor
         total_add_node_loss = torch.stack(add_node_losses).sum()
         if len(add_edge_losses)>0:
             total_add_edge_loss = torch.stack(add_edge_losses).sum()
@@ -195,6 +168,8 @@ class ggm(torch.nn.Module):
         else:
             total_add_edge_loss = 0.0
             total_select_node_loss = 0.0
+
+        #check whether reconstructed graph is same as the input graph
         if not is_equal_node_type(scaffold_h_save, h_save) :
             print ('node miss match')
             print (s1)
@@ -204,13 +179,18 @@ class ggm(torch.nn.Module):
             print (s1)
             print (s2)
 
-        #print ('\t', total_add_node_loss.data.cpu().numpy()[0], total_add_edge_loss.data.cpu().numpy()[0], total_select_node_loss.data.cpu().numpy()[0])
+        #reconstruction loss
         total_loss1 = total_add_node_loss + total_add_edge_loss + total_select_node_loss
+
+        #VAE loss
         total_loss2 = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())*beta1
         #total_loss3 = (c-create_var(torch.from_numpy(a)).type(torch.FloatTensor)).pow(2).sum()*beta2
 
+        #select isomer
         isomers = enumerate_molecule(s1)
         selected_isomer, target = self.select_isomer(s1, latent_vector_with_condition)
+        
+        #isomer loss
         total_loss4 = (selected_isomer-target).pow(2).sum()
         return scaffold_g, scaffold_h, total_loss1, total_loss2, total_loss4
 
@@ -350,42 +330,10 @@ class ggm(torch.nn.Module):
                 g[i][j] = (self.original_edge_embedding(g[i][j][0]), g[i][j][1])
 
     def encode(self, g, h, condition):
-        #pass
-        #for i in range(3):
-        self.mpnn(g, h, self.enc_U1, self.enc_C1, condition)
-        self.mpnn(g, h, self.enc_U2, self.enc_C2, condition)
-        self.mpnn(g, h, self.enc_U3, self.enc_C3, condition)
-        #self.mpnn(g, h, self.enc_U1, self.enc_C1)
-        #self.mpnn(g, h, self.enc_U1, self.enc_C1)
-        #self.mpnn(g, h, self.enc_U1, self.enc_C1)
-        #self.mpnn(g, h, self.enc_U1, self.enc_C1)
-        #self.mpnn(g, h, self.enc_U1, self.enc_C1)
-        #self.mpnn(g, h, self.enc_U2, self.enc_C2)
-        #self.mpnn(g, h, self.enc_U3, self.enc_C3)
+        for k in range(len(self.enc_U)):
+            self.mpnn(g, h, self.enc_U[k], self.enc_C[k], condition)
     
-    def propagate(self, g, h):
-        self.mpnn(g, h, self.prop_U1, self.prop_C1)
-        self.mpnn(g, h, self.prop_U2, self.prop_C2)
-        self.mpnn(g, h, self.prop_U3, self.prop_C3)
-        #self.mpnn(g, h, self.prop_U1, self.prop_C1)
-        #self.mpnn(g, h, self.prop_U1, self.prop_C1)
-        #self.mpnn(g, h, self.prop_U1, self.prop_C1)
-
-        #self.mpnn(g, h, self.prop_U2, self.prop_C2)
-        #self.mpnn(g, h, self.prop_U3, self.prop_C3)
-    
-#    def mpnn(self, g,h, U, V, E):
-#        for v in g.keys():
-#            neighbors = g[v]
-#            for neighbor in neighbors:
-#                e_vw = neighbor[0] # feature variable
-#                w = neighbor[1]
-#                m_w = V(h[w])
-#                m_e_vw = E(e_vw)
-#                reshaped = torch.cat( (h[v], m_w, m_e_vw), 1)
-#                h[v] = F.sigmoid(U(reshaped))
     def mpnn(self, g, h, U, C, condition_vector=None):
-        self.count_mpnn+=1
         st1 = time.time()
         st2 = time.time()
         if len(g)==0:
@@ -466,8 +414,8 @@ class ggm(torch.nn.Module):
         #print ('\tmpnn', end1-st1, self.count_mpnn)
     
     def add_node(self, g, h, latent_vector):
-        self.mpnn(g, h, self.prop_add_node_U1, self.prop_add_node_C1, latent_vector)
-        self.mpnn(g, h, self.prop_add_node_U2, self.prop_add_node_C2, latent_vector)
+        for k in range(len(self.prop_add_node_U)):
+            self.mpnn(g, h, self.prop_add_node_U[k], self.prop_add_node_C[k], latent_vector)
         graph_vector = self.cal_graph_vector(h)
         retval = torch.cat([graph_vector, latent_vector], -1)
         #retval = graph_vector
@@ -486,8 +434,8 @@ class ggm(torch.nn.Module):
         return retval
     
     def add_edge(self, g, h, latent_vector):
-        self.mpnn(g, h, self.prop_add_edge_U1, self.prop_add_edge_C1, latent_vector)
-        self.mpnn(g, h, self.prop_add_edge_U2, self.prop_add_edge_C2, latent_vector)
+        for k in range(len(self.prop_add_edge_U)):
+            self.mpnn(g, h, self.prop_add_edge_U[k], self.prop_add_edge_C[k], latent_vector)
         graph_vector = self.cal_graph_vector(h)
         retval = torch.cat([graph_vector, latent_vector], -1)
         #retval = graph_vector
@@ -498,8 +446,8 @@ class ggm(torch.nn.Module):
         return retval
     
     def select_node(self, g, h, latent_vector):
-        self.mpnn(g, h, self.prop_select_node_U1, self.prop_select_node_C1, latent_vector)
-        self.mpnn(g, h, self.prop_select_node_U2, self.prop_select_node_C2, latent_vector)
+        for k in range(len(self.prop_select_node_U)):
+            self.mpnn(g, h, self.prop_select_node_U[k], self.prop_select_node_C[k], latent_vector)
         vs = collect_node_state(h, except_last = True) 
         size = vs.size()        
         us = h[list(h.keys())[-1]].repeat(list(size)[0], 1)
@@ -521,8 +469,8 @@ class ggm(torch.nn.Module):
         for s in isomers:
             g, h = make_graph(s, extra_atom_feature=True, extra_bond_feature=True)
             self.embede_graph(g, h)
-            self.mpnn(g, h, self.prop_select_isomer_U1, self.prop_select_isomer_C1, latent_vector)
-            self.mpnn(g, h, self.prop_select_isomer_U2, self.prop_select_isomer_C2, latent_vector)
+            for k in range(len(self.prop_select_isomer_U)):
+                self.mpnn(g, h, self.prop_select_isomer_U[k], self.prop_select_isomer_C[k], latent_vector)
             graph_vectors.append(average_node_state(h))
         graph_vectors = torch.cat(graph_vectors, 0)
         latent_vectors = latent_vector.repeat(len(isomers), 1)
@@ -585,9 +533,8 @@ class ggm(torch.nn.Module):
         return self.init_edge_state1(torch.cat([graph_vector, self.edge_embedding(edge_feature)], -1))
 
     def init_scaffold_state(self, scaffold_g, scaffold_h):
-        self.mpnn(scaffold_g, scaffold_h, self.init_scaffold_U1, self.init_scaffold_C1)
-        self.mpnn(scaffold_g, scaffold_h, self.init_scaffold_U2, self.init_scaffold_C2)
-        self.mpnn(scaffold_g, scaffold_h, self.init_scaffold_U3, self.init_scaffold_C3)
+        for k in range(len(self.init_scaffold_U)):
+            self.mpnn(scaffold_g, scaffold_h, self.init_scaffold_U[k], self.init_scaffold_C[k])
 
     def reparameterize(self, latent_vector):
         mu = self.mean(latent_vector)
