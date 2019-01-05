@@ -334,111 +334,81 @@ class ggm(torch.nn.Module):
             self.mpnn(g, h, self.enc_U[k], self.enc_C[k], condition)
     
     def mpnn(self, g, h, U, C, condition_vector=None):
-        st1 = time.time()
-        st2 = time.time()
         if len(g)==0:
             return
-        message_count=0
+        #collect node and edge
         node_list1 = []
         node_list2 = []
         edge_list = []
+
+        #make set of node vector to matrix
         hs = torch.cat([h[v] for v in g.keys()], 0)
 
         for v in g.keys():
             message = 0.0
             for i in range(len(g[v])):
-                message_count+=1
-                #e_vw = neighbor[0] # feature variable
+                #index of connected node
                 w = g[v][i][1]
-                #concat_list.append(torch.cat( (h[v],h[w],neighbor[0]), 1))
                 node_list1.append(h[v])
                 node_list2.append(h[w])
                 edge_list.append(g[v][i][0])
+
         node_list1 = torch.cat(node_list1, 0)
         node_list2 = torch.cat(node_list2, 0)
         edge_list = torch.cat(edge_list, 0)
-        end2 = time.time()
-        #print ('\t\tmessage prepare', end2-st2)
-        st3 =time.time()
+        
+        #calculate message
         if condition_vector is None:
             messages = F.relu(U(torch.cat([node_list1, node_list2, edge_list],-1)))
         else:
             ls = torch.cat([condition_vector for i in range(list(node_list1.size())[0])], 0)
             messages = F.relu(U(torch.cat([node_list1, node_list2, edge_list, ls],-1)))
 
-        end3 = time.time()
-        #print ('\t\tcal message', end3-st3)
-        st4 = time.time()
-
-        #messages = torch.chunk(messages, list(messages.size())[0], 0)
-        #messages = messages.unsqueeze(1)
-        index = 0
-
+        #summing messages
+        index=0
         messages_summed = []
         for v in g.keys():
-            #neighbors = g[v]
-            #message.data.zero_()
             message = 0.0
             i1 = index
             for i in range(len(g[v])):
-                #message+=messages[index]
                 index+=1
             i2 = index
             messages_summed.append(messages[i1:i2].sum(0))
-    
-        end4 = time.time()
-        #print ('\t\tmessage sum1', end4-st4)
-        st6 = time.time()
-        #messages_summed = create_var(torch.zeros(len(g), size_of_node_vector))    
         messages_summed = torch.stack(messages_summed, 0)
-        #messages_summed = torch.cat(messages_summed, 0)
-        end6 = time.time()
-        #print ('\t\tmessage sum2', end6-st6)
-        #messages_summed = create_var(torch.zeros(len(g), size_of_node_vector))
 
-        st5 = time.time()
-        #messages_summed = create_var(torch.zeros(len(g), size_of_node_vector))
-
-
-
-
+        #update node state
         hs = C(messages_summed, hs)
-        hs = torch.chunk(hs, len(g), 0)
-        #hs = hs.unsqueeze(1)
 
+        #split matrix fo node state to vector
+        hs = torch.chunk(hs, len(g), 0)
         for idx,v in enumerate(g.keys()):
             h[v] = hs[idx]
-        end5 = time.time()
-        #print ('\t\tGRU', end5-st5)
-        end1 = time.time()
-        #print ('\tmpnn', end1-st1, self.count_mpnn)
     
     def add_node(self, g, h, latent_vector):
+        #propagation
         for k in range(len(self.prop_add_node_U)):
             self.mpnn(g, h, self.prop_add_node_U[k], self.prop_add_node_C[k], latent_vector)
+        #calculate graph vector
         graph_vector = self.cal_graph_vector(h)
         retval = torch.cat([graph_vector, latent_vector], -1)
-        #retval = graph_vector
+        
+        #FC layer
         retval = F.relu(self.add_node1(retval))
         retval = F.relu(self.add_node2(retval))
         retval = self.add_node3(retval)
         retval = F.softmax(retval, -1)
         return retval
     
-    def predict_root(self, latent_vector):
-        retval = latent_vector
-        retval = F.relu(self.predict_root1(retval))
-        retval = F.relu(self.predict_root2(retval))
-        retval = self.predict_root3(retval)
-        retval = F.softmax(retval, -1)
-        return retval
-    
     def add_edge(self, g, h, latent_vector):
+        #propagation
         for k in range(len(self.prop_add_edge_U)):
             self.mpnn(g, h, self.prop_add_edge_U[k], self.prop_add_edge_C[k], latent_vector)
+        
+        #calculate graph vector
         graph_vector = self.cal_graph_vector(h)
         retval = torch.cat([graph_vector, latent_vector], -1)
-        #retval = graph_vector
+        
+        #FC layer
         retval = F.relu(self.add_edge1(retval))
         retval = F.relu(self.add_edge2(retval))
         retval = self.add_edge3(retval)
@@ -446,14 +416,18 @@ class ggm(torch.nn.Module):
         return retval
     
     def select_node(self, g, h, latent_vector):
+        #propagation
         for k in range(len(self.prop_select_node_U)):
             self.mpnn(g, h, self.prop_select_node_U[k], self.prop_select_node_C[k], latent_vector)
+
+        #collect node state
         vs = collect_node_state(h, except_last = True) 
         size = vs.size()        
         us = h[list(h.keys())[-1]].repeat(list(size)[0], 1)
         latent_vectors = latent_vector.repeat(list(size)[0], 1)
         retval = torch.cat([vs, us, latent_vectors], -1)
-        #retval = torch.cat([vs, us], -1)
+        
+        #FC layer
         retval = F.relu(self.select_node1(retval))
         retval = F.relu(self.select_node2(retval))
         retval = self.select_node3(retval)
@@ -464,8 +438,11 @@ class ggm(torch.nn.Module):
         return retval
     
     def select_isomer(self, mother, latent_vector):
+        #sample possible isomer
         isomers = enumerate_molecule(mother)
         graph_vectors = []
+
+        #make graph for each isomer
         for s in isomers:
             g, h = make_graph(s, extra_atom_feature=True, extra_bond_feature=True)
             self.embede_graph(g, h)
@@ -475,7 +452,8 @@ class ggm(torch.nn.Module):
         graph_vectors = torch.cat(graph_vectors, 0)
         latent_vectors = latent_vector.repeat(len(isomers), 1)
         retval = torch.cat([graph_vectors, latent_vectors], -1)
-        #retval = torch.cat([vs, us], -1)
+        
+        #FC layer
         retval = F.relu(self.select_isomer1(retval))
         retval = F.relu(self.select_isomer2(retval))
         retval = self.select_isomer3(retval)
@@ -483,15 +461,15 @@ class ggm(torch.nn.Module):
         retval = F.softmax(retval, 0)
         target = []
         m = Chem.MolFromSmiles(mother)
+
+        #check which isomer is same as mother
         for s in isomers:
             if m.HasSubstructMatch(Chem.MolFromSmiles(s),useChirality=True):
                 target.append(1)
             else:
                 target.append(0)
         target = create_var(torch.Tensor(target))
-        #print (retval.data.cpu().numpy())
-        #print (target.data.cpu().numpy())
-        #print (retval.size(), target.size())
+        
         return retval, target
 
     def predict_property(self, latent_vector):
