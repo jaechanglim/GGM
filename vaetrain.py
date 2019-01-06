@@ -24,7 +24,7 @@ def train(shared_model, optimizer, smiles, scaffold, condition1, condition2, pid
         optimizer.zero_grad()
         
         #forward
-        retval = model(smiles[idx], scaffold[idx], condition1[idx], condition2[idx])
+        retval = model(smiles[idx], scaffold[idx], condition1[idx], condition2[idx], args.beta1)
         
         #if retval is None, some error occured. it is usually due to invalid smiles
         if retval is None:
@@ -47,9 +47,11 @@ if __name__ == '__main__':
     parser.add_argument('--num_epochs', help='number of epochs', type = int, default = 10000)
     parser.add_argument('--ncpus', help = 'number of cpus', type = int) 
     parser.add_argument('--item_per_cycle', help = 'iteration per cycle', type = int, default = 128) 
-    parser.add_argument('--size_of_node_vector', help = 'dimension of node_vector', type = int, default = 128) 
-    parser.add_argument('--size_of_edge_vector', help = 'dimension of edge vector', type = int, default = 128) 
+    parser.add_argument('--dim_of_node_vector', help = 'dimension of node_vector', type = int, default = 128) 
+    parser.add_argument('--dim_of_edge_vector', help = 'dimension of edge vector', type = int, default = 128) 
+    parser.add_argument('--dim_of_FC', help = 'dimension of FC', type = int, default = 128) 
     parser.add_argument('--save_every', help = 'choose how often model will be saved', type = int, default = 200) 
+    parser.add_argument('--beta1', help = 'beta1 : lambda paramter for VAE training', type = int, default = 5e-3) 
     args = parser.parse_args()
     
     #hyperparameters
@@ -126,7 +128,10 @@ if __name__ == '__main__':
                 p.join() 
             end = time.time()       
             loss = np.mean(np.array([j[0] for k in retval for j in k]))
-            print (epoch, c, loss, end-st)
+            loss1 = np.mean(np.array([j[1] for k in retval for j in k]))
+            loss2 = np.mean(np.array([j[2] for k in retval for j in k]))
+            loss3 = np.mean(np.array([j[3] for k in retval for j in k]))
+            print ('%s\t%s\t%s\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f' %(epoch, c, epoch*num_cycles+c, loss, loss1, loss2, loss3, end-st))
             if c%save_every==0:
                 name = 'save/save_check_'+str(epoch)+'_' + str(c)+'.pt'
                 torch.save(shared_model.state_dict(), name)

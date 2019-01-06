@@ -10,75 +10,70 @@ N_bond_features = 5
 N_extra_atom_features = 5
 N_extra_bond_features = 6
 
-#size_of_node_vector = 128
-#size_of_edge_vector = 128
-#size_of_graph_vector = size_of_node_vector*2
-
 
 class ggm(torch.nn.Module):
     def __init__(self, args):
         super(ggm, self).__init__()
         
-        size_of_node_vector = args.size_of_node_vector
-        size_of_edge_vector = args.size_of_edge_vector
-        size_of_graph_vector = size_of_node_vector*2
+        dim_of_node_vector = args.dim_of_node_vector
+        dim_of_edge_vector = args.dim_of_edge_vector
+        dim_of_FC = args.dim_of_FC
+        self.dim_of_graph_vector = dim_of_node_vector*2
         
-        self.enc_U = nn.ModuleList([nn.Linear(2*size_of_node_vector+size_of_edge_vector+4, size_of_node_vector) for k in range(3)])
-        self.enc_C = nn.ModuleList([nn.GRUCell(size_of_node_vector, size_of_node_vector) for k in range(3)])
+        self.enc_U = nn.ModuleList([nn.Linear(2*dim_of_node_vector+dim_of_edge_vector+4, dim_of_node_vector) for k in range(3)])
+        self.enc_C = nn.ModuleList([nn.GRUCell(dim_of_node_vector, dim_of_node_vector) for k in range(3)])
         
-        self.init_scaffold_U = nn.ModuleList([nn.Linear(2*size_of_node_vector+size_of_edge_vector, size_of_node_vector) for k in range(3)])
-        self.init_scaffold_C = nn.ModuleList([nn.GRUCell(size_of_node_vector, size_of_node_vector) for k in range(3)])
+        self.init_scaffold_U = nn.ModuleList([nn.Linear(2*dim_of_node_vector+dim_of_edge_vector, dim_of_node_vector) for k in range(3)])
+        self.init_scaffold_C = nn.ModuleList([nn.GRUCell(dim_of_node_vector, dim_of_node_vector) for k in range(3)])
         
-        self.prop_add_node_U = nn.ModuleList([nn.Linear(3*size_of_node_vector+size_of_edge_vector+4, size_of_node_vector) for k in range(2)])
-        self.prop_add_node_C = nn.ModuleList([nn.GRUCell(size_of_node_vector, size_of_node_vector) for k in range(2)])
+        self.prop_add_node_U = nn.ModuleList([nn.Linear(3*dim_of_node_vector+dim_of_edge_vector+4, dim_of_node_vector) for k in range(2)])
+        self.prop_add_node_C = nn.ModuleList([nn.GRUCell(dim_of_node_vector, dim_of_node_vector) for k in range(2)])
         
-        self.prop_add_edge_U = nn.ModuleList([nn.Linear(3*size_of_node_vector+size_of_edge_vector+4, size_of_node_vector) for k in range(2)])
-        self.prop_add_edge_C = nn.ModuleList([nn.GRUCell(size_of_node_vector, size_of_node_vector) for k in range(2)])
+        self.prop_add_edge_U = nn.ModuleList([nn.Linear(3*dim_of_node_vector+dim_of_edge_vector+4, dim_of_node_vector) for k in range(2)])
+        self.prop_add_edge_C = nn.ModuleList([nn.GRUCell(dim_of_node_vector, dim_of_node_vector) for k in range(2)])
         
-        self.prop_select_node_U = nn.ModuleList([nn.Linear(3*size_of_node_vector+size_of_edge_vector+4, size_of_node_vector) for k in range(2)])
-        self.prop_select_node_C = nn.ModuleList([nn.GRUCell(size_of_node_vector, size_of_node_vector) for k in range(2)])
+        self.prop_select_node_U = nn.ModuleList([nn.Linear(3*dim_of_node_vector+dim_of_edge_vector+4, dim_of_node_vector) for k in range(2)])
+        self.prop_select_node_C = nn.ModuleList([nn.GRUCell(dim_of_node_vector, dim_of_node_vector) for k in range(2)])
         
-        self.prop_select_isomer_U = nn.ModuleList([nn.Linear(3*size_of_node_vector+size_of_edge_vector+4, size_of_node_vector) for k in range(2)])
-        self.prop_select_isomer_C = nn.ModuleList([nn.GRUCell(size_of_node_vector, size_of_node_vector) for k in range(2)])
+        self.prop_select_isomer_U = nn.ModuleList([nn.Linear(3*dim_of_node_vector+dim_of_edge_vector+4, dim_of_node_vector) for k in range(2)])
+        self.prop_select_isomer_C = nn.ModuleList([nn.GRUCell(dim_of_node_vector, dim_of_node_vector) for k in range(2)])
         
-        self.add_node1 = nn.Linear(size_of_graph_vector+size_of_node_vector+4, 128)
-        self.add_node2 = nn.Linear(128, 128)
-        self.add_node3 = nn.Linear(128, N_atom_features)
+        self.add_node1 = nn.Linear(self.dim_of_graph_vector+dim_of_node_vector+4, dim_of_FC)
+        self.add_node2 = nn.Linear(dim_of_FC, dim_of_FC)
+        self.add_node3 = nn.Linear(dim_of_FC, N_atom_features)
 
-        self.add_edge1 = nn.Linear(size_of_graph_vector+size_of_node_vector+4, 128)
-        self.add_edge2 = nn.Linear(128, 128)
-        self.add_edge3 = nn.Linear(128, N_bond_features)
+        self.add_edge1 = nn.Linear(self.dim_of_graph_vector+dim_of_node_vector+4, dim_of_FC)
+        self.add_edge2 = nn.Linear(dim_of_FC, dim_of_FC)
+        self.add_edge3 = nn.Linear(dim_of_FC, N_bond_features)
         
-        self.select_node1 = nn.Linear(size_of_node_vector*2+size_of_node_vector+4, 128)
-        self.select_node2 = nn.Linear(128, 128)
-        self.select_node3 = nn.Linear(128, 1)
+        self.select_node1 = nn.Linear(dim_of_node_vector*2+dim_of_node_vector+4, dim_of_FC)
+        self.select_node2 = nn.Linear(dim_of_FC, dim_of_FC)
+        self.select_node3 = nn.Linear(dim_of_FC, 1)
         
-        self.select_isomer1 = nn.Linear(size_of_node_vector*1+size_of_node_vector+4, 128)
-        self.select_isomer2 = nn.Linear(128, 128)
-        self.select_isomer3 = nn.Linear(128, 1)
+        self.select_isomer1 = nn.Linear(dim_of_node_vector*1+dim_of_node_vector+4, dim_of_FC)
+        self.select_isomer2 = nn.Linear(dim_of_FC, dim_of_FC)
+        self.select_isomer3 = nn.Linear(dim_of_FC, 1)
 
-        self.predict_property1 = nn.Linear(size_of_node_vector*2, 512)
+        self.predict_property1 = nn.Linear(dim_of_node_vector*2, 512)
         self.predict_property2 = nn.Linear(512, 512)
         self.predict_property3 = nn.Linear(512, 1)
         
-        self.cal_graph_vector1 = nn.Linear(size_of_node_vector, size_of_graph_vector)
-        self.cal_graph_vector2 = nn.Linear(size_of_node_vector, size_of_graph_vector)
-        self.cal_encoded_vector1 = nn.Linear(size_of_node_vector, size_of_node_vector)
-        self.cal_encoded_vector2 = nn.Linear(size_of_node_vector, size_of_node_vector)
-        #self.cal_graph_vector2 = nn.Linear(size_of_graph_vector, size_of_graph_vector)
-        #self.cal_graph_vector3 = nn.Linear(size_of_graph_vector, size_of_graph_vector)
+        self.cal_graph_vector1 = nn.Linear(dim_of_node_vector, self.dim_of_graph_vector)
+        self.cal_graph_vector2 = nn.Linear(dim_of_node_vector, self.dim_of_graph_vector)
+        self.cal_encoded_vector1 = nn.Linear(dim_of_node_vector, dim_of_node_vector)
+        self.cal_encoded_vector2 = nn.Linear(dim_of_node_vector, dim_of_node_vector)
 
-        self.init_graph_state1 = nn.Linear(size_of_graph_vector, size_of_graph_vector)
-        self.init_node_state1 = nn.Linear(size_of_node_vector+size_of_graph_vector, size_of_node_vector)
-        self.init_edge_state1 = nn.Linear(size_of_graph_vector+size_of_edge_vector, size_of_edge_vector)
+        self.init_graph_state1 = nn.Linear(self.dim_of_graph_vector, self.dim_of_graph_vector)
+        self.init_node_state1 = nn.Linear(dim_of_node_vector+self.dim_of_graph_vector, dim_of_node_vector)
+        self.init_edge_state1 = nn.Linear(self.dim_of_graph_vector+dim_of_edge_vector, dim_of_edge_vector)
 
-        self.original_node_embedding = nn.Linear(N_atom_features+N_extra_atom_features, size_of_node_vector, bias = False)
-        self.original_edge_embedding = nn.Linear(N_bond_features+N_extra_bond_features, size_of_edge_vector, bias = False)
-        self.node_embedding = nn.Linear(N_atom_features, size_of_node_vector, bias = False)
-        self.edge_embedding = nn.Linear(N_bond_features, size_of_edge_vector, bias = False)
+        self.original_node_embedding = nn.Linear(N_atom_features+N_extra_atom_features, dim_of_node_vector, bias = False)
+        self.original_edge_embedding = nn.Linear(N_bond_features+N_extra_bond_features, dim_of_edge_vector, bias = False)
+        self.node_embedding = nn.Linear(N_atom_features, dim_of_node_vector, bias = False)
+        self.edge_embedding = nn.Linear(N_bond_features, dim_of_edge_vector, bias = False)
         
-        self.mean = nn.Linear(size_of_node_vector, size_of_node_vector)
-        self.logvar = nn.Linear(size_of_node_vector, size_of_node_vector)
+        self.mean = nn.Linear(dim_of_node_vector, dim_of_node_vector)
+        self.logvar = nn.Linear(dim_of_node_vector, dim_of_node_vector)
 
     def forward(self, s1, s2, condition1, condition2, beta1 = 0.005):
         #make graph of moleculea and scaffold. *_save means this graph will not be changed
@@ -220,7 +215,7 @@ class ggm(torch.nn.Module):
             
             self.embede_graph(scaffold_g, scaffold_h)
             if latent_vector is None:
-                latent_vector = create_var(torch.randn(1, size_of_node_vector)) 
+                latent_vector = create_var(torch.randn(1, dim_of_node_vector)) 
 
         self.init_scaffold_state(scaffold_g, scaffold_h)
 
@@ -482,7 +477,7 @@ class ggm(torch.nn.Module):
         #h_sum = average_node_state(h)
 
         if len(h)==0:
-            return create_var(torch.zeros(1,size_of_graph_vector))
+            return create_var(torch.zeros(1,self.dim_of_graph_vector))
         inputs = torch.cat([h[i] for i in h.keys()], 0)
         h1 = self.cal_graph_vector1(inputs)
         h2 = F.sigmoid(self.cal_graph_vector2(inputs))
@@ -494,7 +489,7 @@ class ggm(torch.nn.Module):
         #h_sum = average_node_state(h)
 
         if len(h)==0:
-            return create_var(torch.zeros(1,size_of_node_vector))
+            return create_var(torch.zeros(1,dim_of_node_vector))
         inputs = torch.cat([h[i] for i in h.keys()], 0)
         h1 = self.cal_encoded_vector1(inputs)
         h2 = F.sigmoid(self.cal_encoded_vector2(inputs))
