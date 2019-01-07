@@ -45,7 +45,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser() 
     parser.add_argument('--lr', help="learning rate", type=float, default = 1e-4)
     parser.add_argument('--num_epochs', help='number of epochs', type = int, default = 10000)
-    parser.add_argument('--ncpus', help = 'number of cpus', type = int) 
+    parser.add_argument('--ncpus', help = 'number of cpus', type = int, default = 1) 
     parser.add_argument('--item_per_cycle', help = 'iteration per cycle', type = int, default = 128) 
     parser.add_argument('--dim_of_node_vector', help = 'dimension of node_vector', type = int, default = 128) 
     parser.add_argument('--dim_of_edge_vector', help = 'dimension of edge vector', type = int, default = 128) 

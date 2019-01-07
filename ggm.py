@@ -14,11 +14,12 @@ N_extra_bond_features = 6
 class ggm(torch.nn.Module):
     def __init__(self, args):
         super(ggm, self).__init__()
-        
+
         dim_of_node_vector = args.dim_of_node_vector
         dim_of_edge_vector = args.dim_of_edge_vector
         dim_of_FC = args.dim_of_FC
         self.dim_of_graph_vector = dim_of_node_vector*2
+        self.dim_of_node_vector = dim_of_node_vector 
         
         self.enc_U = nn.ModuleList([nn.Linear(2*dim_of_node_vector+dim_of_edge_vector+4, dim_of_node_vector) for k in range(3)])
         self.enc_C = nn.ModuleList([nn.GRUCell(dim_of_node_vector, dim_of_node_vector) for k in range(3)])
@@ -215,7 +216,7 @@ class ggm(torch.nn.Module):
             
             self.embede_graph(scaffold_g, scaffold_h)
             if latent_vector is None:
-                latent_vector = create_var(torch.randn(1, dim_of_node_vector)) 
+                latent_vector = create_var(torch.randn(1, self.dim_of_node_vector)) 
 
         self.init_scaffold_state(scaffold_g, scaffold_h)
 
