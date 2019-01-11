@@ -133,7 +133,7 @@ if __name__ == '__main__':
             loss3 = np.mean(np.array([j[3] for k in retval for j in k]))
             print ('%s\t%s\t%s\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f' %(epoch, c, epoch*num_cycles+c, loss, loss1, loss2, loss3, end-st))
             if c%save_every==0:
-                name = 'save/save_check_'+str(epoch)+'_' + str(c)+'.pt'
+                name = 'save/save_'+str(epoch)+'_' + str(c)+'.pt'
                 torch.save(shared_model.state_dict(), name)
 
 

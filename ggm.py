@@ -115,7 +115,7 @@ class ggm(torch.nn.Module):
         for idx in leaves:
             #determine which node should be added and calculate the loss
             new_node = self.add_node(scaffold_g, scaffold_h, latent_vector_with_condition)
-            add_node_losses.append((h_save[idx]-new_node).pow(2).sum())
+            add_node_losses.append((-h_save[idx]*torch.log(new_node+1e-6)).sum())
             
             #add new node to the graph and initialize the new node state
             scaffold_h_save[idx] = h_save[idx]
@@ -127,11 +127,11 @@ class ggm(torch.nn.Module):
             for edge in edge_list:
                 #determin which edge type is added and calculate the corresponding loss
                 new_edge = self.add_edge(scaffold_g, scaffold_h, latent_vector_with_condition)
-                add_edge_losses.append((edge[0]-new_edge).pow(2).sum())
+                add_edge_losses.append((-edge[0]*torch.log(new_edge+1e-6)).sum())
                 target = create_var(one_hot(torch.FloatTensor([list(scaffold_h.keys()).index(edge[1])]),len(scaffold_h)-1 ))
                 #determin which node is connected through seleccted edge and calculate the corresponding loss
                 selected_node = self.select_node(scaffold_g, scaffold_h, latent_vector_with_condition).view(target.size())
-                select_node_losses.append((target-selected_node).pow(2).sum())
+                select_node_losses.append((-target*torch.log(1e-6+selected_node)).sum())
                 
                 #add edge to the graph and initialize the new node state
                 if idx not in scaffold_g_save:
@@ -149,12 +149,12 @@ class ggm(torch.nn.Module):
             #the edge should not be added more. calculate the corresponding loss
             new_edge = self.add_edge(scaffold_g, scaffold_h, latent_vector_with_condition)
             end_add_edge = create_var(one_hot(torch.FloatTensor([4]),5 ))
-            add_edge_losses.append((end_add_edge-new_edge).pow(2).sum())
+            add_edge_losses.append((-end_add_edge*torch.log(1e-6+new_edge)).sum())
 
         #the node should not be added more. calculate the corresponding loss
         new_node = self.add_node(scaffold_g, scaffold_h, latent_vector_with_condition)
         end_add_node = create_var(one_hot(torch.FloatTensor([8]),9 ))
-        add_node_losses.append((end_add_node-new_node).pow(2).sum())
+        add_node_losses.append((-end_add_node*torch.log(1e-6+new_node)).sum())
         
         #convert list to the torch tensor
         total_add_node_loss = torch.stack(add_node_losses).sum()
