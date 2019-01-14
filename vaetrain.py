@@ -12,6 +12,7 @@ import random
 import torch.multiprocessing as mp
 from torch.multiprocessing import Pool
 import pickle
+import os
 import argparse
 
 def train(shared_model, optimizer, smiles, scaffold, condition1, condition2, pid, retval_list, args):
@@ -52,8 +53,11 @@ if __name__ == '__main__':
     parser.add_argument('--dim_of_FC', help = 'dimension of FC', type = int, default = 128) 
     parser.add_argument('--save_every', help = 'choose how often model will be saved', type = int, default = 200) 
     parser.add_argument('--beta1', help = 'beta1 : lambda paramter for VAE training', type = int, default = 5e-3) 
+    parser.add_argument('--save_dir', help = 'save directory', type = str) 
+    parser.add_argument('--key_dir', help = 'key directory', type = str) 
     args = parser.parse_args()
-    
+    if not os.path.isdir(args.save_dir):
+        os.system('mkdir ' + args.save_dir)
     #hyperparameters
     num_epochs = args.num_epochs
     ncpus = args.ncpus
@@ -80,20 +84,20 @@ if __name__ == '__main__':
 
 
     #load data and keys
-    with open('./egfr_keys/train_active_keys.pkl', 'rb') as f:
+    with open(args.key_dir+'/train_active_keys.pkl', 'rb') as f:
         train_active_keys = pickle.load(f)
-    with open('./egfr_keys/train_inactive_keys.pkl', 'rb') as f:
+    with open(args.key_dir+'/train_inactive_keys.pkl', 'rb') as f:
         train_inactive_keys = pickle.load(f)
-    with open('./egfr_keys/test_active_keys.pkl', 'rb') as f:
+    with open(args.key_dir+'/test_active_keys.pkl', 'rb') as f:
         test_active_keys = pickle.load(f)
-    with open('./egfr_keys/test_inactive_keys.pkl', 'rb') as f:
+    with open(args.key_dir+'/test_inactive_keys.pkl', 'rb') as f:
         test_inactive_keys = pickle.load(f)
-    with open('./egfr_keys/id_to_smiles.pkl', 'rb') as f:
+    with open(args.key_dir+'/id_to_smiles.pkl', 'rb') as f:
         id_to_smiles = pickle.load(f)
-    with open('./egfr_keys/id_to_whole_activity.pkl', 'rb') as f:
-        id_to_whole_activity = pickle.load(f)
-    with open('./egfr_keys/id_to_scaffold_activity.pkl', 'rb') as f:
-        id_to_scaffold_activity = pickle.load(f)
+    with open(args.key_dir+'/id_to_condition1.pkl', 'rb') as f:
+        id_to_condition1 = pickle.load(f)
+    with open(args.key_dir+'/id_to_condition2.pkl', 'rb') as f:
+        id_to_condition2 = pickle.load(f)
     
 
     num_cycles = int(len(id_to_smiles)/ncpus/item_per_cycle)
@@ -113,8 +117,8 @@ if __name__ == '__main__':
                 random.shuffle(keys)
 
                 #activities work as condition. we need both activities of whole molecule and scaffold
-                condition1 = [id_to_whole_activity[k] for k in keys]
-                condition2 = [id_to_scaffold_activity[k] for k in keys]
+                condition1 = [id_to_condition1[k] for k in keys]
+                condition2 = [id_to_condition2[k] for k in keys]
 
                 #we need smiles of whole molecule and scaffold to make graph of a molecule                
                 smiles = [id_to_smiles[k][0] for k in keys]
@@ -133,7 +137,7 @@ if __name__ == '__main__':
             loss3 = np.mean(np.array([j[3] for k in retval for j in k]))
             print ('%s\t%s\t%s\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f' %(epoch, c, epoch*num_cycles+c, loss, loss1, loss2, loss3, end-st))
             if c%save_every==0:
-                name = 'save/save_'+str(epoch)+'_' + str(c)+'.pt'
+                name = args.save_dir+'/save_'+str(epoch)+'_' + str(c)+'.pt'
                 torch.save(shared_model.state_dict(), name)
 
 
