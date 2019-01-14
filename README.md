@@ -18,4 +18,16 @@ part of output_tpsa would be like this
 
 17	0	3893	1.258	0.847	0.301	0.111	50.898
 
-# Test command
+# Generate new molecules
+target property : TPSA
+
+target value = 100, 130
+
+scaffold value = 50.95
+
+scaffold = c1ccc(Nc2ncnc3c2oc2ccccc23)cc1
+
+python sample.py --save_fpath=save_tpsa/save_15_200.pt --target_property=130 --scaffold_property=50.95 --output_filename=generated_tpsa_130.txt --maximum_value=150 --minimum_value=0 --scaffold='c1ccc(Nc2ncnc3c2oc2ccccc23)cc1' --ncpus=8 --item_per_cycle=16
+
+plot distribution of generated molecules
+![TPSA](./TPSA.jpg)
