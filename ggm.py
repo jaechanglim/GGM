@@ -24,7 +24,7 @@ class ggm(torch.nn.Module):
         self.enc_U = nn.ModuleList([nn.Linear(2*dim_of_node_vector+dim_of_edge_vector+4, dim_of_node_vector) for k in range(3)])
         self.enc_C = nn.ModuleList([nn.GRUCell(dim_of_node_vector, dim_of_node_vector) for k in range(3)])
         
-        self.init_scaffold_U = nn.ModuleList([nn.Linear(2*dim_of_node_vector+dim_of_edge_vector, dim_of_node_vector) for k in range(3)])
+        self.init_scaffold_U = nn.ModuleList([nn.Linear(2*dim_of_node_vector+dim_of_edge_vector+4, dim_of_node_vector) for k in range(3)])
         self.init_scaffold_C = nn.ModuleList([nn.GRUCell(dim_of_node_vector, dim_of_node_vector) for k in range(3)])
         
         self.prop_add_node_U = nn.ModuleList([nn.Linear(3*dim_of_node_vector+dim_of_edge_vector+4, dim_of_node_vector) for k in range(2)])
@@ -108,7 +108,7 @@ class ggm(torch.nn.Module):
         latent_vector_with_condition = torch.cat([latent_vector, condition], -1)
          
         #encode node state of scaffold graph
-        self.init_scaffold_state(scaffold_g, scaffold_h)
+        self.init_scaffold_state(scaffold_g, scaffold_h, condition)
 
         #check which node is included in scaffold and which node is not
         leaves = [i for i in h_save.keys() if i not in scaffold_h.keys()]
@@ -218,7 +218,7 @@ class ggm(torch.nn.Module):
             if latent_vector is None:
                 latent_vector = create_var(torch.randn(1, self.dim_of_node_vector)) 
 
-        self.init_scaffold_state(scaffold_g, scaffold_h)
+
 
         if condition1 is None or condition2 is None:
             a = np.random.uniform(0,1,1)[0]
@@ -227,6 +227,7 @@ class ggm(torch.nn.Module):
             condition2 = np.array([[b, 1-b]])
         
         condition = create_var(torch.from_numpy(np.concatenate([condition1, condition2], -1)).float())
+        self.init_scaffold_state(scaffold_g, scaffold_h, condition)
                         
         latent_vector = torch.cat([latent_vector, condition], -1)
 
@@ -506,9 +507,9 @@ class ggm(torch.nn.Module):
         graph_vector = self.cal_graph_vector(h)
         return self.init_edge_state1(torch.cat([graph_vector, self.edge_embedding(edge_feature)], -1))
 
-    def init_scaffold_state(self, scaffold_g, scaffold_h):
+    def init_scaffold_state(self, scaffold_g, scaffold_h, condition):
         for k in range(len(self.init_scaffold_U)):
-            self.mpnn(scaffold_g, scaffold_h, self.init_scaffold_U[k], self.init_scaffold_C[k])
+            self.mpnn(scaffold_g, scaffold_h, self.init_scaffold_U[k], self.init_scaffold_C[k], condition)
 
     def reparameterize(self, latent_vector):
         mu = self.mean(latent_vector)

@@ -52,7 +52,7 @@ if __name__ == '__main__':
     parser.add_argument('--dim_of_edge_vector', help = 'dimension of edge vector', type = int, default = 128) 
     parser.add_argument('--dim_of_FC', help = 'dimension of FC', type = int, default = 128) 
     parser.add_argument('--save_every', help = 'choose how often model will be saved', type = int, default = 200) 
-    parser.add_argument('--beta1', help = 'beta1 : lambda paramter for VAE training', type = int, default = 5e-3) 
+    parser.add_argument('--beta1', help = 'beta1 : lambda paramter for VAE training', type = float, default = 5e-3) 
     parser.add_argument('--save_dir', help = 'save directory', type = str) 
     parser.add_argument('--key_dir', help = 'key directory', type = str) 
     args = parser.parse_args()
