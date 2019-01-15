@@ -1,11 +1,12 @@
-import numpy as np
-import os
-import torch
-from rdkit import Chem
 from collections import OrderedDict
-from torch.autograd import Variable
 from operator import itemgetter
+import os
+
+import numpy as np
+from rdkit import Chem
 from rdkit.Chem.EnumerateStereoisomers import EnumerateStereoisomers, StereoEnumerationOptions
+import torch
+from torch.autograd import Variable
 import torch.nn as nn
 
 #import deepchem as dc

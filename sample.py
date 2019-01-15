@@ -1,17 +1,19 @@
+import argparse
 from collections import OrderedDict
-from shared_optim import SharedRMSprop, SharedAdam
-import torch.optim as optim
-from utils import *
-from torch.autograd import Variable
-from ggm import ggm
 from random import shuffle
+import time
+
 import numpy as np
 import torch
-import torch.nn as nn
-import time
-import argparse
+from torch.autograd import Variable
 import torch.multiprocessing as mp
 from torch.multiprocessing import Pool
+import torch.nn as nn
+import torch.optim as optim
+
+from ggm import ggm
+from shared_optim import SharedRMSprop, SharedAdam
+from utils import *
 
 def normalize(v, max_v, min_v):
     v = min(max_v, v)

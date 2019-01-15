@@ -1,9 +1,11 @@
+import time
+
 from rdkit import Chem
 import torch
-import torch.nn.functional as F
 import torch.nn as nn
+import torch.nn.functional as F
+
 from utils import *
-import time
 
 N_atom_features = 9
 N_bond_features = 5
