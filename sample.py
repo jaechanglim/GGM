@@ -13,7 +13,7 @@ import torch.optim as optim
 
 from ggm import ggm
 from shared_optim import SharedRMSprop, SharedAdam
-from utils import *
+import utils
 
 def normalize(v, max_v, min_v):
     v = min(max_v, v)
@@ -37,7 +37,7 @@ def sample(shared_model, smiles, scaffold, condition1, condition2, pid, retval_l
         g_gen, h_gen  = retval
         
         try:
-            new_s = graph_to_smiles(g_gen, h_gen)
+            new_s = utils.graph_to_smiles(g_gen, h_gen)
         except:
             new_s = None
         retval_list[pid].append((s1, new_s))
@@ -82,7 +82,7 @@ if __name__ == '__main__':
     print ("Model #Params: %dK" % (sum([x.nelement() for x in shared_model.parameters()]) / 1000,))
     
     #initialize parameters of the model 
-    shared_model = initialize_model(shared_model, save_fpath)
+    shared_model = utils.initialize_model(shared_model, save_fpath)
     
     scaffold = args.scaffold
     scaffold = [scaffold for i in range(item_per_cycle)]

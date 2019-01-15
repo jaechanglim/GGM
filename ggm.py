@@ -1,11 +1,12 @@
 import time
 
+import numpy as np
 from rdkit import Chem
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from utils import *
+import utils
 
 N_atom_features = 9
 N_bond_features = 5
@@ -80,12 +81,12 @@ class ggm(torch.nn.Module):
 
     def forward(self, s1, s2, condition1, condition2, beta1 = 0.005):
         #make graph of moleculea and scaffold. *_save means this graph will not be changed
-        g_save, h_save, scaffold_g_save, scaffold_h_save = make_graphs(s1, s2)
+        g_save, h_save, scaffold_g_save, scaffold_h_save = utils.make_graphs(s1, s2)
         if g_save is None and h_save is None:
             return None
 
         #make same graph of moleculea and scaffold as above. this graph can be changed
-        g, h, scaffold_g, scaffold_h = make_graphs(s1, s2, extra_atom_feature=True, extra_bond_feature=True)
+        g, h, scaffold_g, scaffold_h = utils.make_graphs(s1, s2, extra_atom_feature=True, extra_bond_feature=True)
         
         #collect losses
         add_node_losses = []
@@ -97,7 +98,7 @@ class ggm(torch.nn.Module):
         self.embede_graph(scaffold_g, scaffold_h)
 
         #from numpy to torch tensor
-        condition = create_var(torch.from_numpy(np.array(condition1+condition2)).float().unsqueeze(0))
+        condition = utils.create_var(torch.from_numpy(np.array(condition1+condition2)).float().unsqueeze(0))
 
         #encode node state of graph
         self.encode(g, h, condition)
@@ -130,7 +131,7 @@ class ggm(torch.nn.Module):
                 #determin which edge type is added and calculate the corresponding loss
                 new_edge = self.add_edge(scaffold_g, scaffold_h, latent_vector_with_condition)
                 add_edge_losses.append((-edge[0]*torch.log(new_edge+1e-6)).sum())
-                target = create_var(one_hot(torch.FloatTensor([list(scaffold_h.keys()).index(edge[1])]),len(scaffold_h)-1 ))
+                target = utils.create_var(utils.one_hot(torch.FloatTensor([list(scaffold_h.keys()).index(edge[1])]),len(scaffold_h)-1 ))
                 #determin which node is connected through seleccted edge and calculate the corresponding loss
                 selected_node = self.select_node(scaffold_g, scaffold_h, latent_vector_with_condition).view(target.size())
                 select_node_losses.append((-target*torch.log(1e-6+selected_node)).sum())
@@ -150,12 +151,12 @@ class ggm(torch.nn.Module):
 
             #the edge should not be added more. calculate the corresponding loss
             new_edge = self.add_edge(scaffold_g, scaffold_h, latent_vector_with_condition)
-            end_add_edge = create_var(one_hot(torch.FloatTensor([4]),5 ))
+            end_add_edge = utils.create_var(utils.one_hot(torch.FloatTensor([4]),5 ))
             add_edge_losses.append((-end_add_edge*torch.log(1e-6+new_edge)).sum())
 
         #the node should not be added more. calculate the corresponding loss
         new_node = self.add_node(scaffold_g, scaffold_h, latent_vector_with_condition)
-        end_add_node = create_var(one_hot(torch.FloatTensor([8]),9 ))
+        end_add_node = utils.create_var(utils.one_hot(torch.FloatTensor([8]),9 ))
         add_node_losses.append((-end_add_node*torch.log(1e-6+new_node)).sum())
         
         #convert list to the torch tensor
@@ -168,11 +169,11 @@ class ggm(torch.nn.Module):
             total_select_node_loss = 0.0
 
         #check whether reconstructed graph is same as the input graph
-        if not is_equal_node_type(scaffold_h_save, h_save) :
+        if not utils.is_equal_node_type(scaffold_h_save, h_save) :
             print ('node miss match')
             print (s1)
             print (s2)
-        if not is_equal_edge_type(scaffold_g_save, g_save) :
+        if not utils.is_equal_edge_type(scaffold_g_save, g_save) :
             print ('edge miss match')
             print (s1)
             print (s2)
@@ -182,10 +183,10 @@ class ggm(torch.nn.Module):
 
         #VAE loss
         total_loss2 = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())*beta1
-        #total_loss3 = (c-create_var(torch.from_numpy(a)).type(torch.FloatTensor)).pow(2).sum()*beta2
+        #total_loss3 = (c-utils.create_var(torch.from_numpy(a)).type(torch.FloatTensor)).pow(2).sum()*beta2
 
         #select isomer
-        isomers = enumerate_molecule(s1)
+        isomers = utils.enumerate_molecule(s1)
         selected_isomer, target = self.select_isomer(s1, latent_vector_with_condition)
         
         #isomer loss
@@ -197,10 +198,10 @@ class ggm(torch.nn.Module):
             print ('when you sample, you must give scaffold')
             return None
         elif s1 is not None:
-            g_save, h_save, scaffold_g_save, scaffold_h_save = make_graphs(s1, s2)
+            g_save, h_save, scaffold_g_save, scaffold_h_save = utils.make_graphs(s1, s2)
             if g_save is None and h_save is None:
                 return None
-            g, h, scaffold_g, scaffold_h = make_graphs(s1, s2, extra_atom_feature=True, extra_bond_feature=True)
+            g, h, scaffold_g, scaffold_h = utils.make_graphs(s1, s2, extra_atom_feature=True, extra_bond_feature=True)
             
             self.embede_graph(g, h)
             self.embede_graph(scaffold_g, scaffold_h)
@@ -211,14 +212,14 @@ class ggm(torch.nn.Module):
 
 
         elif s1 is None:
-            scaffold_g_save, scaffold_h_save = make_graph(s2)
+            scaffold_g_save, scaffold_h_save = utils.make_graph(s2)
             if scaffold_g_save is None and scaffold_h_save is None:
                 return None
-            scaffold_g, scaffold_h = make_graph(s2, extra_atom_feature=True, extra_bond_feature=True)
+            scaffold_g, scaffold_h = utils.make_graph(s2, extra_atom_feature=True, extra_bond_feature=True)
             
             self.embede_graph(scaffold_g, scaffold_h)
             if latent_vector is None:
-                latent_vector = create_var(torch.randn(1, self.dim_of_node_vector)) 
+                latent_vector = utils.create_var(torch.randn(1, self.dim_of_node_vector)) 
 
         self.init_scaffold_state(scaffold_g, scaffold_h)
 
@@ -228,14 +229,14 @@ class ggm(torch.nn.Module):
             condition1 = np.array([[a, 1-a]])
             condition2 = np.array([[b, 1-b]])
         
-        condition = create_var(torch.from_numpy(np.concatenate([condition1, condition2], -1)).float())
+        condition = utils.create_var(torch.from_numpy(np.concatenate([condition1, condition2], -1)).float())
                         
         latent_vector = torch.cat([latent_vector, condition], -1)
 
         for null_index1 in range(100):
             
             new_node = self.add_node(scaffold_g, scaffold_h, latent_vector)
-            new_node = probability_to_one_hot(new_node, stochastic)
+            new_node = utils.probability_to_one_hot(new_node, stochastic)
             if np.argmax(new_node.data.cpu().numpy()[0]) == N_atom_features-1:
                 break
 
@@ -245,12 +246,12 @@ class ggm(torch.nn.Module):
             
             for null_index2 in range(5):            
                 new_edge = self.add_edge(scaffold_g, scaffold_h, latent_vector)
-                new_edge = probability_to_one_hot(new_edge, stochastic)
+                new_edge = utils.probability_to_one_hot(new_edge, stochastic)
 
                 if np.argmax(new_edge.data.cpu().numpy()[0]) == N_bond_features-1:
                     break
                 selected_node = self.select_node(scaffold_g, scaffold_h, latent_vector).view(1,-1)
-                selected_node = list(scaffold_h.keys())[np.argmax(probability_to_one_hot(selected_node, stochastic).data.cpu().numpy()[0])]
+                selected_node = list(scaffold_h.keys())[np.argmax(utils.probability_to_one_hot(selected_node, stochastic).data.cpu().numpy()[0])]
                 if idx not in scaffold_g_save:
                     scaffold_g_save[idx]=[]
                     scaffold_g[idx]=[]
@@ -268,23 +269,23 @@ class ggm(torch.nn.Module):
 
 
         """ 
-        isomers = enumerate_molecule(s1)
+        isomers = utils.enumerate_molecule(s1)
         selected_isomer, target = self.select_isomer(s1, latent_vector)
         total_loss4 = (selected_isomer-target).pow(2).sum()
         """
 
     
     def optimize(self, s1, s2, stochastic = False, lr = 0.01, max_iter = 100, beta1 = 0.01):
-        g, h, scaffold_g, scaffold_h = make_graphs(s1, s2, extra_atom_feature=True, extra_bond_feature=True)
+        g, h, scaffold_g, scaffold_h = utils.make_graphs(s1, s2, extra_atom_feature=True, extra_bond_feature=True)
         self.embede_graph(g, h)
         self.embede_graph(scaffold_g, scaffold_h)
         self.encode(g, h)
         encoded_vector = self.cal_encoded_vector(h)
         latent_vector, mu, logvar = self.reparameterize(encoded_vector)
-        start_point = create_var(encoded_vector.data, True) 
+        start_point = utils.create_var(encoded_vector.data, True) 
         self.init_scaffold_state(scaffold_g, scaffold_h)
         
-        scaffold_state = average_node_state(scaffold_h)
+        scaffold_state = utils.average_node_state(scaffold_h)
         visited = []
         for iteration in range(max_iter):
             latent_vector, mu, logvar = self.reparameterize(start_point)
@@ -296,7 +297,7 @@ class ggm(torch.nn.Module):
             objective.backward(retain_graph=True)
             #grad = torch.autograd.grad(prop, start_point)[0]
             start_point = start_point.data + lr * start_point.grad.data
-            start_point = create_var(start_point, True)
+            start_point = utils.create_var(start_point, True)
             visited.append(start_point)
 
         retval = []
@@ -308,12 +309,12 @@ class ggm(torch.nn.Module):
             objective = new_prop[0]-loss1*beta1
             g_gen, h_gen = self.sample(None, s2, latent_vector) 
             try:
-                new_s = graph_to_smiles(g_gen, h_gen)
+                new_s = utils.graph_to_smiles(g_gen, h_gen)
             except:
                 new_s = None
             if new_s is None or new_s.find('.')!=-1:
                 continue
-            isomers = enumerate_molecule(new_s)
+            isomers = utils.enumerate_molecule(new_s)
             selected_isomer, target = self.select_isomer(s1, latent_vector)
             new_s = isomers[np.argmax(selected_isomer.squeeze().data.cpu().numpy())]
             retval.append((new_s, objective, new_prop[0], loss1, latent_vector.data.cpu().numpy()[0]))
@@ -419,7 +420,7 @@ class ggm(torch.nn.Module):
             self.mpnn(g, h, self.prop_select_node_U[k], self.prop_select_node_C[k], latent_vector)
 
         #collect node state
-        vs = collect_node_state(h, except_last = True) 
+        vs = utils.collect_node_state(h, except_last = True) 
         size = vs.size()        
         us = h[list(h.keys())[-1]].repeat(list(size)[0], 1)
         latent_vectors = latent_vector.repeat(list(size)[0], 1)
@@ -437,16 +438,16 @@ class ggm(torch.nn.Module):
     
     def select_isomer(self, mother, latent_vector):
         #sample possible isomer
-        isomers = enumerate_molecule(mother)
+        isomers = utils.enumerate_molecule(mother)
         graph_vectors = []
 
         #make graph for each isomer
         for s in isomers:
-            g, h = make_graph(s, extra_atom_feature=True, extra_bond_feature=True)
+            g, h = utils.make_graph(s, extra_atom_feature=True, extra_bond_feature=True)
             self.embede_graph(g, h)
             for k in range(len(self.prop_select_isomer_U)):
                 self.mpnn(g, h, self.prop_select_isomer_U[k], self.prop_select_isomer_C[k], latent_vector)
-            graph_vectors.append(average_node_state(h))
+            graph_vectors.append(utils.average_node_state(h))
         graph_vectors = torch.cat(graph_vectors, 0)
         latent_vectors = latent_vector.repeat(len(isomers), 1)
         retval = torch.cat([graph_vectors, latent_vectors], -1)
@@ -466,7 +467,7 @@ class ggm(torch.nn.Module):
                 target.append(1)
             else:
                 target.append(0)
-        target = create_var(torch.Tensor(target))
+        target = utils.create_var(torch.Tensor(target))
         
         return retval, target
 
@@ -477,10 +478,10 @@ class ggm(torch.nn.Module):
         return h
 
     def cal_graph_vector(self, h):
-        #h_sum = average_node_state(h)
+        #h_sum = utils.average_node_state(h)
 
         if len(h)==0:
-            return create_var(torch.zeros(1,self.dim_of_graph_vector))
+            return utils.create_var(torch.zeros(1,self.dim_of_graph_vector))
         inputs = torch.cat([h[i] for i in h.keys()], 0)
         h1 = self.cal_graph_vector1(inputs)
         h2 = F.sigmoid(self.cal_graph_vector2(inputs))
@@ -489,10 +490,10 @@ class ggm(torch.nn.Module):
         return retval
     
     def cal_encoded_vector(self, h):
-        #h_sum = average_node_state(h)
+        #h_sum = utils.average_node_state(h)
 
         if len(h)==0:
-            return create_var(torch.zeros(1,dim_of_node_vector))
+            return utils.create_var(torch.zeros(1,dim_of_node_vector))
         inputs = torch.cat([h[i] for i in h.keys()], 0)
         h1 = self.cal_encoded_vector1(inputs)
         h2 = F.sigmoid(self.cal_encoded_vector2(inputs))
@@ -516,7 +517,7 @@ class ggm(torch.nn.Module):
         mu = self.mean(latent_vector)
         logvar = self.logvar(latent_vector)
         std = torch.exp(0.5*logvar)
-        eps = create_var(torch.randn(std.size()))
+        eps = utils.create_var(torch.randn(std.size()))
 
         return eps.mul(std).add_(mu), mu, logvar
 

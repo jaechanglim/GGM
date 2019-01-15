@@ -1,11 +1,11 @@
 # GGM 
 Graph generative model for molecules
 
-# Training command
+# Training command example
 ```
 python -u vaetrain.py --item_per_cycle=128 --ncpus=16 --save_dir=save_tpsa/ --key_dir=tpsa_keys/ > output_tpsa
 ```
-part of `output_tpsa` would be like this:
+The start of `output_tpsa` would be like this:
 ```
 0       0       0       26.472  26.154  0.084   0.234   51.823
 
@@ -22,13 +22,13 @@ part of `output_tpsa` would be like this:
 
 # Example of generating new molecules
 
-target property: TPSA
+Target property = TPSA
 
-target value = 100, 130 
+Target value = 100, 130 
 
-scaffold value = 50.95
+Scaffold value = 50.95
 
-scaffold = c1ccc(Nc2ncnc3c2oc2ccccc23)cc1
+Scaffold = c1ccc(Nc2ncnc3c2oc2ccccc23)cc1
 
 ```
 python sample.py \
@@ -44,5 +44,4 @@ python sample.py \
 ```
 
 Distribution plot of the generated molecules:
-
 ![TPSA](./TPSA.jpg)
