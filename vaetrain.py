@@ -1,19 +1,21 @@
+import argparse
 from collections import OrderedDict
-from shared_optim import SharedRMSprop, SharedAdam
-import torch.optim as optim
-from utils import *
-from ggm import ggm
+import os
+import pickle
+import random
 from random import shuffle
+import time
+
 import numpy as np
 import torch
-import torch.nn as nn
-import time
-import random
 import torch.multiprocessing as mp
 from torch.multiprocessing import Pool
-import pickle
-import os
-import argparse
+import torch.nn as nn
+import torch.optim as optim
+
+from ggm import ggm
+from shared_optim import SharedRMSprop, SharedAdam
+import utils
 
 def train(shared_model, optimizer, smiles, scaffold, condition1, condition2, pid, retval_list, args):
     #each thread make new model
@@ -38,7 +40,7 @@ def train(shared_model, optimizer, smiles, scaffold, condition1, condition2, pid
         loss.backward()
 
         #torch.nn.utils.clip_grad_norm(model.parameters(), 0.5)
-        ensure_shared_grads(model, shared_model, True)
+        utils.ensure_shared_grads(model, shared_model, True)
         optimizer.step()
 
 if __name__ == '__main__':
@@ -80,7 +82,7 @@ if __name__ == '__main__':
     print ("Model #Params: %dK" % (sum([x.nelement() for x in shared_model.parameters()]) / 1000,))
     
     #initialize parameters of the model 
-    shared_model = initialize_model(shared_model, False)
+    shared_model = utils.initialize_model(shared_model, False)
 
 
     #load data and keys
