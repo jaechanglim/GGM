@@ -1,6 +1,13 @@
 # GGM 
 Graph generative model for molecules
 
+### Required libraries
+- PyTorch
+- RDKit
+- OpenBabel (or an executable `babel`)
+- NumPy
+- Matplotlib (optional)
+
 # Training command example
 ```
 python -u vaetrain.py --item_per_cycle=128 --ncpus=16 --save_dir=save_tpsa/ --key_dir=tpsa_keys/ > output_tpsa

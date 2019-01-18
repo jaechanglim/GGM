@@ -6,6 +6,7 @@ from rdkit import Chem
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+
 import utils
 
 N_atom_features = 9  # == len(utils.ATOM_SYMBOLS)
