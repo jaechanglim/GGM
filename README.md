@@ -48,7 +48,9 @@ Distribution plot of the generated molecules:
 
 # effect of beta and stochastic sampling
 * validity of generated molecules (deterministic sampling)
+
 256 times of molecule generation
+
 |          property | target value | beta | number of valid molecules | after remove duplicates |
 | ------------- | ------------- |------------- |------------- |------------- |
 | TPSA       | 80 | 0.1 |  256| 32 |
@@ -68,7 +70,9 @@ Distribution plot of the generated molecules:
 | TPSA       | 120 | 1.0 |  256| 19 |
 
 * validity of generated molecules (stochastic sampling)
+
 256 times of molecule generation
+
 |          property | target value | beta | number of valid molecules | after remove duplicates |
 | ------------- | ------------- |------------- |------------- |------------- |
 | TPSA       | 80 | 0.1 |  240| 201 |
