@@ -141,7 +141,3 @@ if __name__ == '__main__':
             if c%save_every==0:
                 name = args.save_dir+'/save_'+str(epoch)+'_' + str(c)+'.pt'
                 torch.save(shared_model.state_dict(), name)
-
-
-
-

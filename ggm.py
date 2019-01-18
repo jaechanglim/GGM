@@ -160,10 +160,10 @@ class ggm(torch.nn.Module):
         add_node_losses.append((-end_add_node*torch.log(1e-6+new_node)).sum())
         
         #convert list to the torch tensor
-        total_add_node_loss = torch.stack(add_node_losses).sum()
+        total_add_node_loss = torch.stack(add_node_losses).mean()
         if len(add_edge_losses)>0:
-            total_add_edge_loss = torch.stack(add_edge_losses).sum()
-            total_select_node_loss = torch.stack(select_node_losses).sum()
+            total_add_edge_loss = torch.stack(add_edge_losses).mean()
+            total_select_node_loss = torch.stack(select_node_losses).mean()
         else:
             total_add_edge_loss = 0.0
             total_select_node_loss = 0.0

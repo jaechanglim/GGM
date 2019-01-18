@@ -32,8 +32,7 @@ def sample(shared_model, smiles, scaffold, condition1, condition2, pid, retval_l
         retval = model.sample(None, s2, latent_vector=None, condition1 = condition1, condition2 = condition2, stochastic=False)
         #retval = model.sample(s1, s2, latent_vector=None, stochastic=False)
         #retval = shared_model(s)
-        if retval is None:
-            continue
+        if retval is None: continue
         g_gen, h_gen  = retval
         
         try:
@@ -42,7 +41,7 @@ def sample(shared_model, smiles, scaffold, condition1, condition2, pid, retval_l
             new_s = None
         retval_list[pid].append((s1, new_s))
     end1 = time.time()
-
+    return
     #print ('accumulate time', pid, end1-st1)
 
 
@@ -89,11 +88,12 @@ if __name__ == '__main__':
     smiles = [None for i in range(item_per_cycle)]
     retval = mp.Manager().list()
     retval = [mp.Manager().list() for i in range(ncpus)]
+    condition1 = np.array([[target_property, 1-target_property]])
+    condition2 = np.array([[scaffold_property, 1-scaffold_property]])
     st = time.time()
     processes = []
+    
     for i in range(ncpus):
-        condition1 = np.array([[target_property, 1-target_property]])
-        condition2 = np.array([[scaffold_property, 1-scaffold_property]])
         p = mp.Process(target=sample, args=(shared_model, smiles, scaffold,  condition1, condition2, i, retval, args))
         p.start()
         processes.append(p)
@@ -102,6 +102,7 @@ if __name__ == '__main__':
         p.join() 
     end = time.time()       
     valid = [j[1] for k in retval for j in k ]
+    print ('number of trial : ',len(valid))
     valid = [v for v in valid if v is not None]
     print ('before remove duplicate : ', len(valid))
     valid = list(set(valid))
@@ -109,7 +110,7 @@ if __name__ == '__main__':
     w = open(args.output_filename, 'w')
     w.write(scaffold[0]+'\toriginal\tegfr\n')
     for idx in range(len(valid)):
-        w.write(valid[idx] + '\t' + 'gen_' + str(idx) + '\tegfr\n')
+        w.write(valid[idx] + '\t' + 'gen_' + str(idx) + '\n')
     w.close()                
 
 
