@@ -1,5 +1,6 @@
 import argparse
 from collections import OrderedDict
+import os
 from random import shuffle
 import time
 
@@ -36,15 +37,14 @@ def sample(shared_model, smiles, scaffold, condition1, condition2, pid, retval_l
         g_gen, h_gen  = retval
         
         try:
-            new_s = utils.graph_to_smiles(g_gen, h_gen)
+            new_smiles = utils.graph_to_smiles(g_gen, h_gen)
         except:
-            new_s = None
-        retval_list[pid].append((s1, new_s))
+            new_smiles = None
+        # Save the given whole SMILES and the new SMILES.
+        retval_list[pid].append((s1, new_smiles))
     end1 = time.time()
     return
     #print ('accumulate time', pid, end1-st1)
-
-
 
 if __name__ == '__main__':
     
@@ -59,16 +59,19 @@ if __name__ == '__main__':
     parser.add_argument('--target_property', help = 'value of target property', type = float) 
     parser.add_argument('--scaffold_property', help = 'valud of scaffold property', type = float) 
     parser.add_argument('--output_filename', help = 'output file name', type = str) 
-    parser.add_argument('--minimum_value', help = 'minimum value of property. It will be used for nomralization', type = float) 
-    parser.add_argument('--maximum_value', help = 'maximum value of property. It will be used for nomralization', type = float) 
+    parser.add_argument('--minimum_value', help = 'minimum value of property. It will be used for normalization', type = float) 
+    parser.add_argument('--maximum_value', help = 'maximum value of property. It will be used for normalization', type = float) 
     args = parser.parse_args()
     
     #hyperparameters
     ncpus = args.ncpus
     item_per_cycle = args.item_per_cycle
-    save_fpath = args.save_fpath
-    target_property=normalize(args.target_property, args.maximum_value, args.minimum_value)
-    scaffold_property=normalize(args.scaffold_property, args.maximum_value, args.minimum_value)
+    save_fpath = os.path.expanduser(args.save_fpath)
+    output_filename = os.path.expanduser(args.output_filename)
+
+    # Normalize the property values to be in [0, 1].
+    target_property = normalize(args.target_property, args.maximum_value, args.minimum_value)
+    scaffold_property = normalize(args.scaffold_property, args.maximum_value, args.minimum_value)
 
     #lines for multiprocessing
     mp.set_start_method('spawn')
@@ -79,32 +82,51 @@ if __name__ == '__main__':
     shared_model.share_memory()
 
     print ("Model #Params: %dK" % (sum([x.nelement() for x in shared_model.parameters()]) / 1000,))
+    print(f"""\
+ncpus             : {ncpus}
+OMP_NUM_THREADS   : {os.environ.get('OMP_NUM_THREADS')}
+Num of generations: {item_per_cycle} per CPU (Total {ncpus*item_per_cycle})
+Model path        : {os.path.abspath(save_fpath)}
+Output path       : {os.path.abspath(output_filename)}
+Scaffold          : {args.scaffold}
+Scaffold property : {args.scaffold_property} -> {scaffold_property}
+Target property   : {args.target_property} -> {target_property}
+dim_of_node_vector: {args.dim_of_node_vector}
+dim_of_edge_vector: {args.dim_of_edge_vector}
+dim_of_FC         : {args.dim_of_FC}
+""")
     
     #initialize parameters of the model 
     shared_model = utils.initialize_model(shared_model, save_fpath)
     
     scaffold = args.scaffold
+    # Copy the same scaffold SMILES for multiple generations.
     scaffold = [scaffold for i in range(item_per_cycle)]
+    # A whole SMILES can be given and become a latent vector for decoding,
+    # but here it is given as None so that a latent is randomly sampled.
     smiles = [None for i in range(item_per_cycle)]
-    retval = mp.Manager().list()
-    retval = [mp.Manager().list() for i in range(ncpus)]
     condition1 = np.array([[target_property, 1-target_property]])
     condition2 = np.array([[scaffold_property, 1-scaffold_property]])
+    
+    # A list of multiprocessing.managers.ListProxy to collect SMILES
+    retval_list = [mp.Manager().list() for i in range(ncpus)]
     st = time.time()
     processes = []
     
     for i in range(ncpus):
-        p = mp.Process(target=sample, args=(shared_model, smiles, scaffold,  condition1, condition2, i, retval, args))
+        p = mp.Process(target=sample, args=(shared_model, smiles, scaffold, condition1, condition2, i, retval_list, args))
         p.start()
         processes.append(p)
         time.sleep(0.1)
     for p in processes:
         p.join() 
     end = time.time()       
-    valid = [j[1] for k in retval for j in k ]
-    print ('number of trial : ',len(valid))
+
+    # retval_list shape -> (ncpus, item_per_cycle, 2)
+    # Each entry in the last axis is: [given whole SMILES, new SMILES].
+    valid = [j[1] for k in retval_list for j in k]  # list of new SMILES
     valid = [v for v in valid if v is not None]
-    print ('before remove duplicate : ', len(valid))
+    print ('before remove duplicate:', len(valid))
     valid = list(set(valid))
     print ('after remove duplicate', len(valid))
     w = open(args.output_filename, 'w')
@@ -112,7 +134,4 @@ if __name__ == '__main__':
     for idx in range(len(valid)):
         w.write(valid[idx] + '\t' + 'gen_' + str(idx) + '\n')
     w.close()                
-
-
-
 
