@@ -320,6 +320,7 @@ class ggm(torch.nn.Module):
             condition2 = np.array([[b, 1-b]])
         
         condition = utils.create_var(torch.from_numpy(np.concatenate([condition1, condition2], -1)).float())
+        self.init_scaffold_state(scaffold_g, scaffold_h, condition)
         latent_vector = torch.cat([latent_vector, condition], -1)
         # -> (1, dim_of_node_vector + N_conditions)
 

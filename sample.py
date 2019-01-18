@@ -30,7 +30,7 @@ def sample(shared_model, smiles, scaffold, condition1, condition2, pid, retval_l
 
     for idx, (s1,s2) in enumerate(zip(smiles, scaffold)):
         model.load_state_dict(shared_model.state_dict())
-        retval = model.sample(None, s2, latent_vector=None, condition1 = condition1, condition2 = condition2, stochastic=False)
+        retval = model.sample(None, s2, latent_vector=None, condition1 = condition1, condition2 = condition2, stochastic=args.stochastic)
         #retval = model.sample(s1, s2, latent_vector=None, stochastic=False)
         #retval = shared_model(s)
         if retval is None: continue
@@ -61,6 +61,7 @@ if __name__ == '__main__':
     parser.add_argument('--output_filename', help = 'output file name', type = str) 
     parser.add_argument('--minimum_value', help = 'minimum value of property. It will be used for normalization', type = float) 
     parser.add_argument('--maximum_value', help = 'maximum value of property. It will be used for normalization', type = float) 
+    parser.add_argument('--stochastic', help = 'stocahstically add node and edge', dest='stochastic', action='store_true') 
     args = parser.parse_args()
     
     #hyperparameters
@@ -94,6 +95,7 @@ Target property   : {args.target_property} -> {target_property}
 dim_of_node_vector: {args.dim_of_node_vector}
 dim_of_edge_vector: {args.dim_of_edge_vector}
 dim_of_FC         : {args.dim_of_FC}
+stochastic         : {args.stochastic}
 """)
     
     #initialize parameters of the model 
