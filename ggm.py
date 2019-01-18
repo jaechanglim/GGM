@@ -5,7 +5,7 @@ from rdkit import Chem
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
+import random
 import utils
 
 N_atom_features = 9  # == len(utils.ATOM_SYMBOLS)
@@ -23,7 +23,7 @@ class ggm(torch.nn.Module):
         dim_of_FC = args.dim_of_FC
         self.dim_of_graph_vector = dim_of_node_vector*2
         self.dim_of_node_vector = dim_of_node_vector 
-        
+         
         self.enc_U = nn.ModuleList([nn.Linear(2*dim_of_node_vector+dim_of_edge_vector+N_conditions, dim_of_node_vector) for k in range(3)])
         self.enc_C = nn.ModuleList([nn.GRUCell(dim_of_node_vector, dim_of_node_vector) for k in range(3)])
         
@@ -79,7 +79,7 @@ class ggm(torch.nn.Module):
         self.mean = nn.Linear(dim_of_node_vector, dim_of_node_vector)
         self.logvar = nn.Linear(dim_of_node_vector, dim_of_node_vector)
 
-    def forward(self, s1, s2, condition1, condition2, beta1 = 0.005):
+    def forward(self, s1, s2, condition1, condition2, shuffle=False):
         """\
         Parameters
         ----------
@@ -87,7 +87,6 @@ class ggm(torch.nn.Module):
         s2: scaffold SMILES str
         condition1: [whole_value, 1-whole_value]
         condition2: [scaffold_value, 1-scaffold_value]
-        beta1: ratio of the KL loss to the reconstruction loss
 
         Returns
         -------
@@ -162,6 +161,8 @@ class ggm(torch.nn.Module):
 
         #check which node is included in scaffold and which node is not
         leaves = [i for i in h_save.keys() if i not in scaffold_h.keys()]
+        if shuffle : random.shuffle(leaves)
+
         for idx in leaves:
             #determine which node type should be added and calculate the loss
             new_node = self.add_node(scaffold_g, scaffold_h, latent_vector_with_condition)
@@ -174,6 +175,7 @@ class ggm(torch.nn.Module):
 
             #find the edges connected to the new node
             edge_list = [e for e in g_save[idx] if e[1] in list(scaffold_h.keys())]
+            if shuffle : random.shuffle(edge_list)
             
             for edge in edge_list:
                 #determin which edge type is added and calculate the corresponding loss
@@ -215,10 +217,10 @@ class ggm(torch.nn.Module):
         add_node_losses.append((-end_add_node*torch.log(1e-6+new_node)).sum())
         
         #convert list to the torch tensor
-        total_add_node_loss = torch.stack(add_node_losses).sum()
+        total_add_node_loss = torch.stack(add_node_losses).mean()
         if len(add_edge_losses)>0:
-            total_add_edge_loss = torch.stack(add_edge_losses).sum()
-            total_select_node_loss = torch.stack(select_node_losses).sum()
+            total_add_edge_loss = torch.stack(add_edge_losses).mean()
+            total_select_node_loss = torch.stack(select_node_losses).mean()
         else:
             total_add_edge_loss = 0.0
             total_select_node_loss = 0.0
@@ -237,7 +239,7 @@ class ggm(torch.nn.Module):
         total_loss1 = total_add_node_loss + total_add_edge_loss + total_select_node_loss
 
         #VAE loss (AEVB 2013)
-        total_loss2 = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())*beta1
+        total_loss2 = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
         #total_loss3 = (c-utils.create_var(torch.from_numpy(a)).type(torch.FloatTensor)).pow(2).sum()*beta2
 
         #select isomer

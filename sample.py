@@ -60,8 +60,7 @@ def sample(shared_model, smiles, scaffold, condition1, condition2, pid, retval_l
         retval = model.sample(None, s2, latent_vector=None, condition1 = condition1, condition2 = condition2, stochastic=False)
         #retval = model.sample(s1, s2, latent_vector=None, stochastic=False)
         #retval = shared_model(s)
-        if retval is None:
-            continue
+        if retval is None: continue
         g_gen, h_gen  = retval
         
         try:
@@ -71,6 +70,7 @@ def sample(shared_model, smiles, scaffold, condition1, condition2, pid, retval_l
         # Save the given whole SMILES and the new SMILES.
         retval_list[pid].append((s1, new_smiles))
     end1 = time.time()
+    return
     #print ('accumulate time', pid, end1-st1)
 
 if __name__ == '__main__':
@@ -132,14 +132,15 @@ dim_of_FC         : {args.dim_of_FC}
     # A whole SMILES can be given and become a latent vector for decoding,
     # but here it is given as None so that a latent is randomly sampled.
     smiles = [None for i in range(item_per_cycle)]
-    retval_list = mp.Manager().list()  # Is this needed?
-    # A list of multiprocessing.managers.ListProxy to collect SMILESs
+    condition1 = np.array([[target_property, 1-target_property]])
+    condition2 = np.array([[scaffold_property, 1-scaffold_property]])
+    
+    # A list of multiprocessing.managers.ListProxy to collect SMILES
     retval_list = [mp.Manager().list() for i in range(ncpus)]
     st = time.time()
     processes = []
+    
     for i in range(ncpus):
-        condition1 = np.array([[target_property, 1-target_property]])  # Should be here?
-        condition2 = np.array([[scaffold_property, 1-scaffold_property]])  # Should be here?
         p = mp.Process(target=sample, args=(shared_model, smiles, scaffold, condition1, condition2, i, retval_list, args))
         p.start()
         processes.append(p)
@@ -153,8 +154,10 @@ dim_of_FC         : {args.dim_of_FC}
     valid = [v for v in valid if v is not None]
     print ('before remove duplicate:', len(valid))
     valid = list(set(valid))
-    print ('after remove duplicate:', len(valid))
-    with open(output_filename, 'w') as w:
-        w.write(scaffold[0]+'\toriginal\tegfr\n')
-        for idx in range(len(valid)):
-            w.write(valid[idx] + '\t' + 'gen_' + str(idx) + '\tegfr\n')
+    print ('after remove duplicate', len(valid))
+    w = open(args.output_filename, 'w')
+    w.write(scaffold[0]+'\toriginal\tegfr\n')
+    for idx in range(len(valid)):
+        w.write(valid[idx] + '\t' + 'gen_' + str(idx) + '\n')
+    w.close()                
+

@@ -56,7 +56,7 @@ def train(shared_model, optimizer, smiles, scaffold, condition1, condition2, pid
         optimizer.zero_grad()
         
         #forward
-        retval = model(smiles[idx], scaffold[idx], condition1[idx], condition2[idx], args.beta1)
+        retval = model(smiles[idx], scaffold[idx], condition1[idx], condition2[idx], args.shuffle_order)
         
         #if retval is None, some error occured. it is usually due to invalid smiles
         if retval is None:
@@ -64,7 +64,7 @@ def train(shared_model, optimizer, smiles, scaffold, condition1, condition2, pid
 
         #train model
         g_gen, h_gen, loss1, loss2, loss3 = retval
-        loss = loss1 + loss2 + loss3  # torch.autograd.Variable of shape (1,)
+        loss = loss1 + loss2*args.beta1 + loss3  # torch.autograd.Variable of shape (1,)
         retval_list[pid].append((loss.data.cpu().numpy()[0], loss1.data.cpu().numpy()[0], loss2.data.cpu().numpy()[0], loss3.data.cpu().numpy()[0]))
         loss.backward()
 
@@ -86,6 +86,7 @@ if __name__ == '__main__':
     parser.add_argument('--beta1', help = 'beta1 : lambda paramter for VAE training', type = float, default = 5e-3) 
     parser.add_argument('--save_dir', help = 'save directory', type = str) 
     parser.add_argument('--key_dir', help = 'key directory', type = str) 
+    parser.add_argument('--shuffle_order', help = 'shuffle order or adding node and edge', dest='shuffle_order', action='store_true') 
     args = parser.parse_args()
     args.save_dir = os.path.expanduser(args.save_dir)
     args.key_dir = os.path.expanduser(args.key_dir)
@@ -153,6 +154,7 @@ Learning rate     : {lr}
 dim_of_node_vector: {args.dim_of_node_vector}
 dim_of_edge_vector: {args.dim_of_edge_vector}
 dim_of_FC         : {args.dim_of_FC}
+shuffle_order         : {args.shuffle_order}
 """)
     
     print("# epoch  cycle_in_epoch  total_cycle  loss  loss1  loss2  loss3  time")
