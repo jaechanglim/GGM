@@ -18,6 +18,35 @@ from shared_optim import SharedRMSprop, SharedAdam
 import utils
 
 def train(shared_model, optimizer, smiles, scaffold, condition1, condition2, pid, retval_list, args):
+    """\
+    Target function for the multiprocessed training.
+
+    In addition to updating model parameters, 
+    loss values are collected by `retval_list` after each `forward`.
+
+    Parameters
+    ----------
+    shared_model: torch.nn.Module
+        A shared model to be trained.
+    optimizer: torch.optim.Optimizer
+        A shared optimizer.
+    smiles: list[str]
+        A list of whole SMILESs.
+    scaffold: list[str]
+        A list of scaffold SMILESs corresponding to `smiles`.
+    condition1: list[float]
+        A list of whole property values for CVAE.
+    condition2: list[float]
+        A list of scaffold property values for CVAE.
+    pid: int
+        CPU index.
+    retval_list: list[multiprocessing.managers.ListProxy]
+        A list of lists to collect loss floats from CPUs.
+        In each cycle, the final shape will be:
+            (ncpus, minibatch_size, num_of_losses)
+    args: argparse.Namespace
+        Delivers hyperparameters from command arguments to the model.
+    """
     #each thread make new model
     model=ggm(args)
     for idx in range(len(smiles)):
@@ -146,8 +175,8 @@ dim_of_FC         : {args.dim_of_FC}
                 condition2 = [id_to_condition2[k] for k in keys]  # [[scaffold_value, 1-scaffold_value], ...]
 
                 #we need smiles of whole molecule and scaffold to make graph of a molecule                
-                smiles = [id_to_smiles[k][0] for k in keys]    # list of whole SMILES
-                scaffold = [id_to_smiles[k][1] for k in keys]  # list of scaffold SMILES
+                smiles = [id_to_smiles[k][0] for k in keys]    # list of whole SMILESs
+                scaffold = [id_to_smiles[k][1] for k in keys]  # list of scaffold SMILESs
 
                 p = mp.Process(target=train, args=(shared_model, shared_optimizer, smiles, scaffold, condition1, condition2, i, retval_list, args))
                 p.start()

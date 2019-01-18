@@ -81,15 +81,22 @@ def make_graph(smiles, extra_atom_feature = False, extra_bond_feature = False):
     """\
     make_graph(...) -> edge_dict, node_dict
 
+    Construct a graph representation of a given SMILES.
+
+    The nodes and edges are represented as one-hot vectors,
+    which are respectively gathered into a node dict and an edge dict
+    having atom indices as their keys.
+    See below for the exact return structures.
+    This graph representation is constantly used in the methods of `ggm.ggm`.
+
     Returns
     -------
-    g: OrderedDict[int, list[tuple[torch.autogra.Variable, int]]]
+    g: OrderedDict[int, list[tuple[torch.autogra.Variable, int]]] | None
         Edge (bond) dictionary, which looks like:
             { atom_idx: [ (one_hot_vector, partner_atom_idx), ... ], ... }
-    h: OrderedDict[int, torch.autograd.Variable]
+    h: OrderedDict[int, torch.autograd.Variable] | None
         Node (atom) dictionary, which looks like:
             { atom_idx: one_hot_vector, ... }
-
     If untreatable atoms are present, return (None, None).
     """
     g = OrderedDict({})
@@ -300,6 +307,8 @@ def is_equal_edge_type(g1, g2):
 
 
 def ensure_shared_grads(model, shared_model, gpu=False):
+    """Make a shared model have the gradients of a worker model.
+    Used in `vaetrain.train` for multiprocessed optimization."""
     for param, shared_param in zip(model.parameters(), shared_model.parameters()):
         if shared_param.grad is not None and not gpu:
             return
@@ -415,7 +424,7 @@ def index_change(g, h, new_index):
     return new_g, new_h            
 
 def enumerate_molecule(s: str):
-    """Return a list of all the isomer SMILES of a given SMILES `s`."""
+    """Return a list of all the isomer SMILESs of a given SMILES `s`."""
     m = Chem.MolFromSmiles(s) 
     opts = StereoEnumerationOptions(unique=True, onlyUnassigned=False)
     #opts = StereoEnumerationOptions(tryEmbedding=True, unique=True, onlyUnassigned=False)

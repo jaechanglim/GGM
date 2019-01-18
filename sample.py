@@ -24,6 +24,33 @@ def normalize(v, max_v, min_v):
 #c1ccc(Nc2ncnc3c2oc2ccccc23)cc1 CHEMBL149512 Brc4cccc(Nc2ncnc3c1ccccc1oc23)c4 6.130768280269024
 
 def sample(shared_model, smiles, scaffold, condition1, condition2, pid, retval_list, args):
+    """\
+    Target function for the multiprocessed sampling.
+
+    Sampled SMILESs are collected by `retval_list`.
+
+    Parameters
+    ----------
+    shared_model: torch.nn.Module
+        A shared trained model to be used in the sampling.
+    smiles: list[str] | list[None]
+        A list of whole SMILESs to be used as latent vectors.
+    scaffold: list[str]
+        A list of scaffold SMILESs from which new SMILESs will be sampled.
+    condition1: list[float]
+        A list of target property values.
+    condition2: list[float]
+        A list of scaffold property values.
+    pid: int
+        CPU index.
+    retval_list: list[multiprocessing.managers.ListProxy]
+        A list of lists to collect sampled SMILESs.
+        In each sampling a given whole SMILES and a sampled SMILES are saved,
+        so the final shape will be:
+            (ncpus, num_of_generations_per_cpu, 2)
+    args: argparse.Namespace
+        Delivers hyperparameters from command arguments to the model.
+    """
     #optimizer = optim.Adam(shared_model.parameters(), lr=1e-4)
     model=ggm(args)
     st1 = time.time()
@@ -50,7 +77,7 @@ if __name__ == '__main__':
     
     parser = argparse.ArgumentParser() 
     parser.add_argument('--ncpus', help = 'number of cpus', type = int, default = 1) 
-    parser.add_argument('--item_per_cycle', help = 'iteration per cycle', type = int, default = 128) 
+    parser.add_argument('--item_per_cycle', help = 'number of generations per CPU', type = int, default = 128) 
     parser.add_argument('--dim_of_node_vector', help = 'dimension of node_vector', type = int, default = 128) 
     parser.add_argument('--dim_of_edge_vector', help = 'dimension of edge vector', type = int, default = 128) 
     parser.add_argument('--dim_of_FC', help = 'dimension of FC', type = int, default = 128) 
@@ -106,7 +133,7 @@ dim_of_FC         : {args.dim_of_FC}
     # but here it is given as None so that a latent is randomly sampled.
     smiles = [None for i in range(item_per_cycle)]
     retval_list = mp.Manager().list()  # Is this needed?
-    # A list of multiprocessing.managers.ListProxy to collect SMILES
+    # A list of multiprocessing.managers.ListProxy to collect SMILESs
     retval_list = [mp.Manager().list() for i in range(ncpus)]
     st = time.time()
     processes = []
@@ -122,8 +149,7 @@ dim_of_FC         : {args.dim_of_FC}
     end = time.time()       
 
     # retval_list shape -> (ncpus, item_per_cycle, 2)
-    # Each entry in the last axis is: [given whole SMILES, new SMILES].
-    valid = [j[1] for k in retval_list for j in k]  # list of new SMILES
+    valid = [j[1] for k in retval_list for j in k]  # list of new SMILESs
     valid = [v for v in valid if v is not None]
     print ('before remove duplicate:', len(valid))
     valid = list(set(valid))
