@@ -45,3 +45,49 @@ python sample.py \
 
 Distribution plot of the generated molecules:
 ![TPSA](./TPSA.jpg)
+
+# effect of beta and stochastic sampling
+* validity of generated molecules (deterministic sampling)
+
+256 times of molecule generation
+
+|          property | target value | beta | number of valid molecules | after remove duplicates |
+| ------------- | ------------- |------------- |------------- |------------- |
+| TPSA       | 80 | 0.1 |  256| 32 |
+| TPSA       | 80 | 0.2 |  256| 5 |
+| TPSA       | 80 | 0.3 |  255| 10 |
+| TPSA       | 80 | 0.5 |  256| 7 |
+| TPSA       | 80 | 1.0 |  256| 6 |
+| TPSA       | 100 | 0.1 |  189| 61 |
+| TPSA       | 100 | 0.2 |  256| 48 |
+| TPSA       | 100 | 0.3 |  254| 8 |
+| TPSA       | 100 | 0.5 |  255| 47 |
+| TPSA       | 100 | 1.0 |  256| 5 |
+| TPSA       | 120 | 0.1 |  195| 51 |
+| TPSA       | 120 | 0.2 |  256| 39 |
+| TPSA       | 120 | 0.3 |  160| 24 |
+| TPSA       | 120 | 0.5 |  256| 36 |
+| TPSA       | 120 | 1.0 |  256| 19 |
+
+* validity of generated molecules (stochastic sampling)
+
+256 times of molecule generation
+
+|          property | target value | beta | number of valid molecules | after remove duplicates |
+| ------------- | ------------- |------------- |------------- |------------- |
+| TPSA       | 80 | 0.1 |  240| 201 |
+| TPSA       | 80 | 0.2 |  250| 156 |
+| TPSA       | 80 | 0.3 |  254| 192 |
+| TPSA       | 80 | 0.5 |  248| 184 |
+| TPSA       | 80 | 1.0 |  253| 162 |
+| TPSA       | 100 | 0.1 |  207| 182 |
+| TPSA       | 100 | 0.2 |  224| 214|
+| TPSA       | 100 | 0.3 |  183| 164|
+| TPSA       | 100 | 0.5 |  217| 208 |
+| TPSA       | 100 | 1.0 |  204| 174|
+| TPSA       | 120 | 0.1 |  201| 194 |
+| TPSA       | 120 | 0.2 |  229| 216|
+| TPSA       | 120 | 0.3 |  198| 189|
+| TPSA       | 120 | 0.5 |  221| 214|
+| TPSA       | 120 | 1.0 |  204| 185|
+
