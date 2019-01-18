@@ -565,7 +565,7 @@ class ggm(torch.nn.Module):
             where `isomers` are the isomers of `mother`.
         """
         #sample possible isomer
-        isomers = utils.enumerate_molecule(mother)  # list of isomer SMILES
+        isomers = utils.enumerate_molecule(mother)  # list of isomer SMILESs
         graph_vectors = []
 
         #make graph for each isomer
