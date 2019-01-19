@@ -377,7 +377,7 @@ def index_rearrange(molecule1, molecule2, g, h):
         0   1   2     1   0        2   1   0
 
     and apply the rearrangement to `g` and `h`.
-    Note that the order of `g.values()` and `h.values()` are preserved.
+    Note that the order of `g.values()` and `h.values()` is preserved.
 
     Parameters
     ----------

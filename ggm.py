@@ -1,3 +1,4 @@
+import random
 import time
 
 import numpy as np
@@ -5,7 +6,6 @@ from rdkit import Chem
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import random
 import utils
 
 N_atom_features = 9  # == len(utils.ATOM_SYMBOLS)
@@ -161,7 +161,7 @@ class ggm(torch.nn.Module):
 
         #check which node is included in scaffold and which node is not
         leaves = [i for i in h_save.keys() if i not in scaffold_h.keys()]
-        if shuffle : random.shuffle(leaves)
+        if shuffle: random.shuffle(leaves)
 
         for idx in leaves:
             #determine which node type should be added and calculate the loss
@@ -175,7 +175,7 @@ class ggm(torch.nn.Module):
 
             #find the edges connected to the new node
             edge_list = [e for e in g_save[idx] if e[1] in list(scaffold_h.keys())]
-            if shuffle : random.shuffle(edge_list)
+            if shuffle: random.shuffle(edge_list)
             
             for edge in edge_list:
                 #determin which edge type is added and calculate the corresponding loss

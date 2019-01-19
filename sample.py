@@ -1,7 +1,6 @@
 import argparse
 from collections import OrderedDict
 import os
-from random import shuffle
 import time
 
 import numpy as np
@@ -17,6 +16,7 @@ from shared_optim import SharedRMSprop, SharedAdam
 import utils
 
 def normalize(v, max_v, min_v):
+    """v -> v' in [0, 1]"""
     v = min(max_v, v)
     v = max(min_v, v)
     return (v-min_v)/(max_v-min_v)
@@ -122,7 +122,7 @@ Target property   : {args.target_property} -> {target_property}
 dim_of_node_vector: {args.dim_of_node_vector}
 dim_of_edge_vector: {args.dim_of_edge_vector}
 dim_of_FC         : {args.dim_of_FC}
-stochastic         : {args.stochastic}
+stochastic        : {args.stochastic}
 """)
     
     #initialize parameters of the model 

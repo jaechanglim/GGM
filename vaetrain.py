@@ -3,7 +3,6 @@ from collections import OrderedDict
 import os
 import pickle
 import random
-from random import shuffle
 import time
 
 import numpy as np
@@ -83,7 +82,7 @@ if __name__ == '__main__':
     parser.add_argument('--dim_of_edge_vector', help = 'dimension of edge vector', type = int, default = 128) 
     parser.add_argument('--dim_of_FC', help = 'dimension of FC', type = int, default = 128) 
     parser.add_argument('--save_every', help = 'choose how often model will be saved', type = int, default = 200) 
-    parser.add_argument('--beta1', help = 'beta1 : lambda paramter for VAE training', type = float, default = 5e-3) 
+    parser.add_argument('--beta1', help = 'beta1: lambda paramter for VAE training', type = float, default = 5e-3) 
     parser.add_argument('--save_dir', help = 'save directory', type = str) 
     parser.add_argument('--key_dir', help = 'key directory', type = str) 
     parser.add_argument('--shuffle_order', help = 'shuffle order or adding node and edge', dest='shuffle_order', action='store_true') 
@@ -154,7 +153,7 @@ Learning rate     : {lr}
 dim_of_node_vector: {args.dim_of_node_vector}
 dim_of_edge_vector: {args.dim_of_edge_vector}
 dim_of_FC         : {args.dim_of_FC}
-shuffle_order         : {args.shuffle_order}
+shuffle_order     : {args.shuffle_order}
 """)
     
     print("# epoch  cycle_in_epoch  total_cycle  loss  loss1  loss2  loss3  time")
