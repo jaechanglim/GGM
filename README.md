@@ -1,4 +1,4 @@
-#### You are in the branch `mutli`, which currently has a problem of duplicative new-molecule generations!
+### You are in the branch `mutli`, which currently has a problem of duplicative new-molecule generations!
 # GGM 
 Graph generative model for molecules
 
@@ -14,13 +14,14 @@ Target properties = MW, logP, SAS
 
 ```
 python -u vaetrain.py \
-    --ncpus=16 \
-    --save_dir=save_tpsa \
+    --ncpus 16 \
+    --save_dir mw-logp-sas-0.1 \
     --key_dirs mw_keys logp_keys sas_keys \
-    --beta 0.1 1> train.out 2> train.err
+    --beta1 0.1 1> train.out 2> train.err
 ```
-The start of `train.out` would be like this:
+Content of `train.out` after input information would be like this:
 ```
+epoch   cyc     totcyc  loss    loss1   loss2   loss3   time
 0       0       0       26.472  26.154  0.084   0.234   51.823
 
 1       0       229     3.454   2.821   0.455   0.178   51.861

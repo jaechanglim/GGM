@@ -114,7 +114,7 @@ Model path        : {os.path.abspath(save_fpath)}
 Output path       : {os.path.abspath(output_filename)}
 Scaffold          : {args.scaffold}
 Scaffold values   : {args.scaffold_properties} -> {scaffold_properties}
-Target values     : {args.target_properties} -> {args.target_properties}
+Target values     : {args.target_properties} -> {target_properties}
 dim_of_node_vector: {args.dim_of_node_vector}
 dim_of_edge_vector: {args.dim_of_edge_vector}
 dim_of_FC         : {args.dim_of_FC}

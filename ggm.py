@@ -337,6 +337,7 @@ class ggm(torch.nn.Module):
             condition1 = np.random.rand(self.N_conditions//2)
             condition2 = np.random.rand(self.N_conditions//2)
         
+        # A condition torch.FloatTensor of shape (1, N_conditions):
         #condition = utils.create_var(torch.from_numpy(np.concatenate([condition1, condition2], -1)).float())
         condition = utils.create_var(torch.from_numpy(np.array(condition1+condition2)).float().unsqueeze(0))
         self.init_scaffold_state(scaffold_g, scaffold_h, condition)
