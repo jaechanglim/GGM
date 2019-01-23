@@ -172,7 +172,7 @@ Data directories  : {key_dirs}
 
                 # We need SMILESs of whole molecules and scaffolds to make molecule graphs.
                 wholes = [id_to_smiles[key][0] for key in keys]     # list of whole SMILESs
-                scaffolds = [id_to_smiles[key][0] for key in keys]  # list of scaffold SMILESs
+                scaffolds = [id_to_smiles[key][1] for key in keys]  # list of scaffold SMILESs
 
                 proc = mp.Process(target=train, args=(shared_model, shared_optimizer, wholes, scaffolds, whole_conditions, scaffold_conditions, pid, retval_list, args))
                 proc.start()

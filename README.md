@@ -1,4 +1,3 @@
-### You are in the branch `mutli`, which currently has a problem of duplicative new-molecule generations!
 # GGM 
 Graph generative model for molecules
 
