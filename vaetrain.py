@@ -2,6 +2,7 @@ import argparse
 from collections import OrderedDict
 import os
 import random
+import re
 import time
 
 import numpy as np
@@ -90,6 +91,7 @@ if __name__ == '__main__':
     parser.add_argument('--key_dirs', help='key directories', nargs='+', metavar='PATH')
     parser.add_argument('--shuffle_order', help = 'shuffle order or adding node and edge', action='store_true') 
     parser.add_argument('--active_ratio', help='active ratio in sampling (default: no matter)', type=float)
+    parser.add_argument('--save_fpath', help='file path of a saved model to restart') 
     args = parser.parse_args()
     args.save_dir = os.path.expanduser(args.save_dir)
     key_dirs = [os.path.expanduser(path) for path in args.key_dirs]
@@ -118,7 +120,13 @@ if __name__ == '__main__':
     print ("Model #Params: %dK" % (sum([x.nelement() for x in shared_model.parameters()]) / 1000,))
     
     #initialize parameters of the model 
-    shared_model = utils.initialize_model(shared_model, False)
+    if args.save_fpath:
+        args.save_fpath = os.path.expanduser(args.save_fpath)
+        initial_epoch, initial_cycle = [int(value) for value in re.findall('\d+', args.save_fpath)]
+        shared_model = utils.initialize_model(shared_model, args.save_fpath)
+    else:
+        initial_epoch = initial_cycle = 0
+        shared_model = utils.initialize_model(shared_model, False)
 
     # Load data and keys.
     # See `utils.load_data` for the variable structures.
@@ -143,11 +151,19 @@ dim_of_edge_vector: {args.dim_of_edge_vector}
 dim_of_FC         : {args.dim_of_FC}
 shuffle_order     : {args.shuffle_order}
 Data directories  : {key_dirs}
+Restart from      : {os.path.abspath(args.save_fpath) if args.save_fpath else None}
 """)
     
     print("epoch  cyc  totcyc  loss  loss1  loss2  loss3  time")
     for epoch in range(num_epochs):
+        # Jump to the previous epoch for restart.
+        if epoch < initial_epoch:
+            continue
         for cycle in range(num_cycles):
+            # Jump to the previous cycle for restart.
+            if epoch == initial_epoch:
+                if cycle < initial_cycle:
+                    continue
             retval_list = mp.Manager().list()  # Is this needed?
             # List of multiprocessing.managers.ListProxy to collect losses
             retval_list = [mp.Manager().list() for i in range(ncpus)]
