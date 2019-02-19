@@ -13,10 +13,21 @@ N_atom_features = 9  # == len(utils.ATOM_SYMBOLS)
 N_bond_features = 5
 N_extra_atom_features = 5
 N_extra_bond_features = 6
-N_conditions = 4  # Currently, len(condition1) + len(condition2)
 
 class ggm(torch.nn.Module):
-    def __init__(self, args):
+    def __init__(self, args, N_conditions):
+        """\
+        Parameters
+        ----------
+        args: argparse.Namespace
+            Delivers hyperparameters from arguments of `vaetrain.py`.
+            The required arguments are:
+                args.dim_of_node_vector
+                args.dim_of_edge_vector
+                args.dim_of_FC
+        N_conditions: int
+            The number of conditions.
+        """
         super(ggm, self).__init__()
 
         dim_of_node_vector = args.dim_of_node_vector
@@ -24,6 +35,7 @@ class ggm(torch.nn.Module):
         dim_of_FC = args.dim_of_FC
         self.dim_of_graph_vector = dim_of_node_vector*2
         self.dim_of_node_vector = dim_of_node_vector 
+        self.N_conditions = N_conditions
          
         self.enc_U = nn.ModuleList([nn.Linear(2*dim_of_node_vector+dim_of_edge_vector+N_conditions, dim_of_node_vector) for k in range(3)])
         self.enc_C = nn.ModuleList([nn.GRUCell(dim_of_node_vector, dim_of_node_vector) for k in range(3)])
@@ -84,10 +96,14 @@ class ggm(torch.nn.Module):
         """\
         Parameters
         ----------
-        s1: whole SMILES str
-        s2: scaffold SMILES str
-        condition1: [whole_value, 1-whole_value]
-        condition2: [scaffold_value, 1-scaffold_value]
+        s1: str
+            A whole-molecule SMILES.
+        s2: str
+            A scaffold SMILES.
+        condition1: list[float]
+            [ whole_value1, whole_value2, ... ]
+        condition2: list[float]
+            [ scaffold_value1, scaffold_value2, ... ]
 
         Returns
         -------
@@ -142,7 +158,7 @@ class ggm(torch.nn.Module):
         self.embede_graph(scaffold_g, scaffold_h)
 
         # A condition torch.FloatTensor of shape (1, N_conditions):
-        # [whole_value, 1-whole_value, scaffold_value, 1-scaffole_value]
+        # [ whole_value1, whole_value2, ..., scaffold_value1, scaffold_value2 ]
         condition = utils.create_var(torch.from_numpy(np.array(condition1+condition2)).float().unsqueeze(0))
 
         #encode node state of graph
@@ -251,7 +267,7 @@ class ggm(torch.nn.Module):
         total_loss4 = (selected_isomer-target).pow(2).sum()
         return scaffold_g, scaffold_h, total_loss1, total_loss2, total_loss4
 
-    def sample(self, s1=None, s2=None, latent_vector = None, condition1 = None, condition2 = None, stochastic = False):
+    def sample(self, s1=None, s2=None, latent_vector=None, condition1=None, condition2=None, stochastic=False):
         """\
         Parameters
         ----------
@@ -264,10 +280,12 @@ class ggm(torch.nn.Module):
             Not used if `s1` is given.
             If both `latent_vector` and `s1` are None,
             a latent vector is sampled from the standard normal.
-        condition1: [target_property, 1-target_property]
-            If None, target_property is sampled from uniform [0, 1].
-        condition2: [scaffold_property, 1-scaffold_property]
-            If None, scaffold_property is sampled from uniform [0, 1].
+        condition1: list[float] | None
+            [ target_value1, target_value2, ... ]
+            If None, target values are sampled from uniform [0, 1].
+        condition2: list[float] | None
+            [ scaffold_value1, scaffold_value2, ... ]
+            If None, scaffold values are sampled from uniform [0, 1].
         stochastic: bool
             See `utils.probability_to_one_hot`.
 
@@ -315,12 +333,13 @@ class ggm(torch.nn.Module):
 
         # Sample condition values if not given.
         if condition1 is None or condition2 is None:
-            a = np.random.uniform(0,1,1)[0]
-            b = np.random.uniform(0,1,1)[0]
-            condition1 = np.array([[a, 1-a]])
-            condition2 = np.array([[b, 1-b]])
+            assert not self.N_conditions%2
+            condition1 = np.random.rand(self.N_conditions//2)
+            condition2 = np.random.rand(self.N_conditions//2)
         
-        condition = utils.create_var(torch.from_numpy(np.concatenate([condition1, condition2], -1)).float())
+        # A condition torch.FloatTensor of shape (1, N_conditions):
+        #condition = utils.create_var(torch.from_numpy(np.concatenate([condition1, condition2], -1)).float())
+        condition = utils.create_var(torch.from_numpy(np.array(condition1+condition2)).float().unsqueeze(0))
         self.init_scaffold_state(scaffold_g, scaffold_h, condition)
         latent_vector = torch.cat([latent_vector, condition], -1)
         # -> (1, dim_of_node_vector + N_conditions)

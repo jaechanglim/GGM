@@ -1,6 +1,8 @@
 from collections import OrderedDict
 from operator import itemgetter
 import os
+import pickle
+import random
 import tempfile
 
 #import deepchem as dc
@@ -453,3 +455,141 @@ def initialize_model(model, load_save_file=False):
                 #nn.init.normal(param, 0.0, 0.15)
                 nn.init.xavier_normal(param)
     return model    
+
+def load_data(key_dirs, mode='train'):
+    """\
+    Load training or test data.
+
+    Parameters
+    ----------
+    key_dirs: list[str]
+        Data directory paths.
+    mode: 'train' | 'test'
+
+    Returns
+    -------
+    id_to_smiles: dict[str, list[str]]
+        { 'STOCK4S-00001': [whole_SMILES, scaffold_SMILES], ... }
+    id_to_whole_conditions: dict[str, list[float]]
+        { 'STOCK4S-00001': [whole_value1, whole_value2, ...], ... }
+    id_to_scaffold_conditions: dict[str, list[float]]
+        { 'STOCK4S-00001': [scaffold_value1, scaffold_value2, ...], ... }
+    active_keys: list[ list[str] ]
+        [
+            [ 'STOCK4S-00033', 'STOCK4S-00102', ... ],  # of property 1
+            [ 'STOCK4S-00501', 'STOCK4S-00007', ... ],  # of property 2
+            ...
+        ]
+    inactive_keys: list[ list[str] ]
+        Similar to `active_keys`, but with keys of inactive ones.
+    """
+    list_of_id_to_whole_condition = []
+    list_of_id_to_scaffold_condition = []
+    active_keys = []
+    inactive_keys = []
+
+    with open(os.path.join(key_dirs[0], 'id_to_smiles.pkl'), 'rb') as f:
+        id_to_smiles = pickle.load(f)
+    for key_dir in key_dirs:
+        with open(os.path.join(key_dir, 'id_to_whole_condition.pkl'), 'rb') as f:
+            list_of_id_to_whole_condition.append( pickle.load(f) )
+        with open(os.path.join(key_dir, 'id_to_scaffold_condition.pkl'), 'rb') as f:
+            list_of_id_to_scaffold_condition.append( pickle.load(f) )
+        with open(os.path.join(key_dir, mode+'_active_keys.pkl'), 'rb') as f:
+            active_keys.append( pickle.load(f) )
+        with open(os.path.join(key_dir, mode+'_inactive_keys.pkl'), 'rb') as f:
+            inactive_keys.append( pickle.load(f) )
+
+    # Merge the ID-to-condition dicts.
+    # The routine here covers general situations where
+    # the molecule sets of different properties do not perfectly overlap.
+    # BUT within EACH property, the whole keys and scaffold keys should not differ!
+    common_keys = set.intersection(*[set(dic.keys()) for dic in list_of_id_to_whole_condition])
+    id_to_whole_conditions = {
+        key:[ id_to_condition[key] for id_to_condition in list_of_id_to_whole_condition ]
+        for key in common_keys
+    }
+    id_to_scaffold_conditions = {
+        key:[ id_to_condition[key] for id_to_condition in list_of_id_to_scaffold_condition ]
+        for key in common_keys
+    }
+
+    # Filter only the keys common in every property.
+    id_to_smiles = {key:id_to_smiles[key] for key in common_keys}
+    active_keys = [list(set(active_keys_i) & common_keys) for active_keys_i in active_keys]
+    inactive_keys = [list(set(inactive_keys_i) & common_keys) for inactive_keys_i in inactive_keys]
+    return id_to_smiles, id_to_whole_conditions, id_to_scaffold_conditions, active_keys, inactive_keys
+
+def sample_data(active_keys, inactive_keys, size, ratios=None):
+    """\
+    Sample active and inactive keys of multiple properties.
+
+    Parameters
+    ----------
+    active_keys: list[ list[str] ]
+        See `load_data`.
+    inactive_keys: list[ list[str] ]
+        See `load_data`.
+    size: int
+        The number of samples.
+        If it cannot be divided by the number of properties,
+        remainder samples are sampled totally randomly
+        assuming little change in active/inactive ratios.
+    ratios: float | list[float] | None
+        (A list of) the active-sample ratio of EACH property.
+        If None, 0.5 is used for all.
+
+    Returns
+    -------
+    keys: list[str]
+        A list of sampled keys.
+    """
+    # Preprocess
+    num_properties = len(active_keys)
+    num_each = size // num_properties
+    if isinstance(ratios, float):
+        ratios = [ratios for _ in range(num_properties)]
+    elif ratios is None:
+        ratios = [0.5 for _ in range(num_properties)]
+    assert num_properties == len(inactive_keys) == len(ratios)
+
+    # Sample.
+    random.seed()
+    key_pool = np.array(active_keys[0] + inactive_keys[0])
+    keys = []
+    for i in range(num_properties):
+        sample_idxs = random.choices(
+            np.nonzero(np.in1d(key_pool, active_keys[i]))[0],
+            k = int(num_each * ratios[i])
+        )
+        sample_idxs += random.choices(
+            np.nonzero(np.in1d(key_pool, inactive_keys[i]))[0],
+            k = num_each - len(sample_idxs)
+        )
+        keys.extend(key_pool[sample_idxs])
+        key_pool = np.delete(key_pool, sample_idxs)
+
+    # Additional sampling
+    keys.extend(random.choices(key_pool, k=size-len(keys)))
+    random.shuffle(keys)
+    return keys
+
+def active_ratios(keys, active_keys):
+    """\
+    Check the active-molecule ratio in keys w.r.t. each property.
+
+    Parameters
+    ----------
+    keys: list[str]
+        A list of keys whose activities will be checked.
+    active_keys: list[ list[str] ]
+        See `load_data`.
+
+    Returns
+    -------
+    ratios: 1D ndarray[float]
+        [ active_ratio_of_property1, active_ratio_of_property2, ... ]
+    """
+    activities = np.array([np.in1d(keys, active_keys_i) for active_keys_i in active_keys]).T
+    ratios = activities.sum(0) / len(activities)
+    return ratios
