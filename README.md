@@ -15,7 +15,8 @@ Target properties = MW, logP, SAS
 python -u vaetrain.py \
     --ncpus 16 \
     --save_dir mw-logp-sas-0.1 \
-    --key_dirs mw_keys logp_keys sas_keys \
+    --smiles_path data_egfr/id_smiles.txt \
+    --data_paths data_egfr/mw/data_normalized.txt data_egfr/logp/data_normalized.txt data_egfr/sas/data_normalized.txt \
     --beta1 0.1 1> train.out 2> train.err
 ```
 Content of `train.out` after input information would be like this:

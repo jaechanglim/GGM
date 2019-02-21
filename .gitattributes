@@ -1,2 +1,2 @@
-*_keys/*.pkl filter=lfs diff=lfs merge=lfs -text
-*_keys/*.txt filter=lfs diff=lfs merge=lfs -text
+data*/**/*.pkl filter=lfs diff=lfs merge=lfs -text
+data*/**/*.txt filter=lfs diff=lfs merge=lfs -text

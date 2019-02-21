@@ -1,1 +1,0 @@
-../egfr_keys/smiles_id_scaffold.txt

@@ -51,7 +51,7 @@ def train(shared_model, optimizer, wholes, scaffolds, whole_conditions, scaffold
     """
     #each thread make new model
     # Number of conditions <- (number of properties) * 2
-    model=ggm(args, len(args.key_dirs)*2)
+    model=ggm(args, len(args.data_paths)*2)
     for idx in range(len(wholes)):
         #set parameters of model as same as that of reference model
         model.load_state_dict(shared_model.state_dict())
@@ -85,18 +85,20 @@ if __name__ == '__main__':
     parser.add_argument('--dim_of_node_vector', help = 'dimension of node_vector', type = int, default = 128) 
     parser.add_argument('--dim_of_edge_vector', help = 'dimension of edge vector', type = int, default = 128) 
     parser.add_argument('--dim_of_FC', help = 'dimension of FC', type = int, default = 128) 
-    parser.add_argument('--save_every', help = 'choose how often model will be saved', type = int, default = 200) 
     parser.add_argument('--beta1', help = 'beta1: lambda paramter for VAE training', type = float, default = 5e-3) 
+    parser.add_argument('--smiles_path', help='SMILES-data path')
+    parser.add_argument('--data_paths', help='property-data paths', nargs='+', default=[], metavar='PATH')
     parser.add_argument('--save_dir', help = 'save directory', type = str) 
-    parser.add_argument('--key_dirs', help='key directories', nargs='+', metavar='PATH')
+    parser.add_argument('--save_every', help = 'choose how often model will be saved', type = int, default = 200) 
     parser.add_argument('--shuffle_order', help = 'shuffle order or adding node and edge', action='store_true') 
     parser.add_argument('--active_ratio', help='active ratio in sampling (default: no matter)', type=float)
     parser.add_argument('--save_fpath', help='file path of a saved model to restart') 
     args = parser.parse_args()
-    args.save_dir = os.path.expanduser(args.save_dir)
-    key_dirs = [os.path.expanduser(path) for path in args.key_dirs]
-    if not os.path.isdir(args.save_dir):
-        os.mkdir(args.save_dir)
+    save_dir = os.path.expanduser(args.save_dir)
+    smiles_path = os.path.expanduser(args.smiles_path)
+    data_paths = [os.path.expanduser(path) for path in args.data_paths]
+    if not os.path.isdir(save_dir):
+        os.mkdir(save_dir)
 
     #hyperparameters
     num_epochs = args.num_epochs
@@ -111,7 +113,7 @@ if __name__ == '__main__':
 
     #model 
     # Number of conditions <- (number of properties) * 2
-    shared_model = ggm(args, len(args.key_dirs)*2)
+    shared_model = ggm(args, len(args.data_paths)*2)
     shared_model.share_memory()  # torch.nn.Module.share_memory
 
     #shared optimizer
@@ -130,9 +132,12 @@ if __name__ == '__main__':
 
     # Load data and keys.
     # See `utils.load_data` for the variable structures.
-    ( id_to_smiles,
-      id_to_whole_conditions, id_to_scaffold_conditions,
-      active_keys, inactive_keys ) = utils.load_data(key_dirs, 'train')
+    if args.data_paths:
+        id_to_smiles, id_to_whole_conditions, id_to_scaffold_conditions = utils.load_data(smiles_path, *data_paths)
+    # Only load SMILESs.
+    # This is for the future implementation of unconditional training.
+    else:
+        id_to_smiles = utils.dict_from_txt(arsg.smiles_path)
 
     num_cycles = int(len(id_to_smiles)/ncpus/item_per_cycle)
     print(f"""\
@@ -142,15 +147,16 @@ Number of data    : {len(id_to_smiles)}
 Number of epochs  : {num_epochs}
 Number of cycles  : {num_cycles} per epoch
 Minibatch size    : {item_per_cycle} per CPU per cycle
-Save model every  : {save_every} cycles per epoch (Total {num_epochs*(num_cycles//save_every+1)} models)
-Save directory    : {os.path.abspath(args.save_dir)}
-beta1             : {args.beta1}
 Learning rate     : {lr}
 dim_of_node_vector: {args.dim_of_node_vector}
 dim_of_edge_vector: {args.dim_of_edge_vector}
 dim_of_FC         : {args.dim_of_FC}
+beta1             : {args.beta1}
+SMILES data path  : {os.path.abspath(args.smiles_path)}
+Data directories  : {data_paths}
+Save directory    : {os.path.abspath(save_dir)}
+Save model every  : {save_every} cycles per epoch (Total {num_epochs*(num_cycles//save_every+1)} models)
 shuffle_order     : {args.shuffle_order}
-Data directories  : {key_dirs}
 Restart from      : {os.path.abspath(args.save_fpath) if args.save_fpath else None}
 """)
     
@@ -175,7 +181,7 @@ Restart from      : {os.path.abspath(args.save_fpath) if args.save_fpath else No
                     keys = random.sample(id_to_smiles.keys(), item_per_cycle)
                 # Sample active and inactive keys by the required ratio.
                 else:
-                    keys = utils.sample_data(acaive_keys, inactive_keys, item_per_cycle, args.active_ratio)
+                    keys = utils.sample_data(id_to_whole_conditions, item_per_cycle, args.active_ratio)
 
                 # Property (descriptor) values work as conditions;
                 # we need both values of whole molecules and scaffolds.
@@ -205,5 +211,5 @@ Restart from      : {os.path.abspath(args.save_fpath) if args.save_fpath else No
             loss3 = np.mean(np.array([losses[3] for k in retval_list for losses in k]))
             print ('%s\t%s\t%s\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f' %(epoch, cycle, epoch*num_cycles+cycle, loss, loss1, loss2, loss3, end-st))
             if cycle%save_every == 0:
-                name = args.save_dir+'/save_'+str(epoch)+'_' + str(cycle)+'.pt'
+                name = save_dir+'/save_'+str(epoch)+'_' + str(cycle)+'.pt'
                 torch.save(shared_model.state_dict(), name)

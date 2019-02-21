@@ -1,1 +1,0 @@
-../egfr_keys/id_to_smiles.pkl

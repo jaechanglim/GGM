@@ -456,88 +456,145 @@ def initialize_model(model, load_save_file=False):
                 nn.init.xavier_normal(param)
     return model    
 
-def load_data(key_dirs, mode='train'):
+def dict_from_txt(path, dtype=None):
     """\
-    Load training or test data.
+    Generate a dict from a text file.
+
+    The structure of `path` should be
+
+        key1  value1_1  value1_2  ...
+        key2  value2_1  value2_2  ...
+        ...
+
+    and then the returned dict will be like
+
+        { key1:[value1_1, value1_2, ...], ... }
+
+    NOTE that the dict value will always be a list,
+    even if the number of elements is less than 2.
 
     Parameters
     ----------
-    key_dirs: list[str]
-        Data directory paths.
-    mode: 'train' | 'test'
+    path: str
+        A data text path.
+    dtype: type | None
+        The type of values (None means str).
+        Keys will always be str type.
+
+    Returns
+    -------
+    out_dict: dict[str, list[dtype]]
+    """
+    out_dict = {}
+    # np.genfromtxt or np.loadtxt are slower than pure Python!
+    with open(path) as f:
+        for line in f:
+            row = line.split()
+            if dtype is None:
+                out_dict[row[0]] = row[1:]
+            else:
+                out_dict[row[0]] = [dtype(value) for value in row[1:]]
+    return out_dict
+
+def load_data(smiles_path, *data_paths):
+    """\
+    Read data text files.
+
+    The structure of `smiles_path` should be 
+
+        #    whole      scaffold
+        ID1  SMILES1_1  SMILES1_2
+        ID2  SMILES2_1  SMILES2_2
+        ...
+
+    And the structure of EACH path in `data_paths` should be
+
+        #    whole               scaffold
+        ID1  value_of_SMILES1_1  value_of_SMILES1_2
+        ID2  value_of_SMILES2_1  value_of_SMILES2_2
+        ...
+
+    Parameters
+    ----------
+    smiles_path: str
+        A data text path of IDs and SMILESs.
+    data_paths: iterable of str
+        Each is a data text path of IDs and property values.
 
     Returns
     -------
     id_to_smiles: dict[str, list[str]]
-        { 'STOCK4S-00001': [whole_SMILES, scaffold_SMILES], ... }
     id_to_whole_conditions: dict[str, list[float]]
-        { 'STOCK4S-00001': [whole_value1, whole_value2, ...], ... }
+        { ID1: [whole_value_of_property1, whole_value_of_property2, ...], ... }
     id_to_scaffold_conditions: dict[str, list[float]]
-        { 'STOCK4S-00001': [scaffold_value1, scaffold_value2, ...], ... }
-    active_keys: list[ list[str] ]
-        [
-            [ 'STOCK4S-00033', 'STOCK4S-00102', ... ],  # of property 1
-            [ 'STOCK4S-00501', 'STOCK4S-00007', ... ],  # of property 2
-            ...
-        ]
-    inactive_keys: list[ list[str] ]
-        Similar to `active_keys`, but with keys of inactive ones.
+        { ID1: [scaffold_value_of_property1, scaffold_value_of_property2, ...], ... }
     """
-    list_of_id_to_whole_condition = []
-    list_of_id_to_scaffold_condition = []
-    active_keys = []
-    inactive_keys = []
+    id_to_smiles = dict_from_txt(smiles_path)  # {id:[whole_smiles, scaffold_smiles], ...}
+    data_dicts = [dict_from_txt(path, float) for path in data_paths]
 
-    with open(os.path.join(key_dirs[0], 'id_to_smiles.pkl'), 'rb') as f:
-        id_to_smiles = pickle.load(f)
-    for key_dir in key_dirs:
-        with open(os.path.join(key_dir, 'id_to_whole_condition.pkl'), 'rb') as f:
-            list_of_id_to_whole_condition.append( pickle.load(f) )
-        with open(os.path.join(key_dir, 'id_to_scaffold_condition.pkl'), 'rb') as f:
-            list_of_id_to_scaffold_condition.append( pickle.load(f) )
-        with open(os.path.join(key_dir, mode+'_active_keys.pkl'), 'rb') as f:
-            active_keys.append( pickle.load(f) )
-        with open(os.path.join(key_dir, mode+'_inactive_keys.pkl'), 'rb') as f:
-            inactive_keys.append( pickle.load(f) )
+    # Only collect molecule IDs having every label.
+    common_keys = set(id_to_smiles.keys()).intersection(
+        *(data_dict.keys() for data_dict in data_dicts)
+    )
 
-    # Merge the ID-to-condition dicts.
-    # The routine here covers general situations where
-    # the molecule sets of different properties do not perfectly overlap.
-    # BUT within EACH property, the whole keys and scaffold keys should not differ!
-    common_keys = set.intersection(*[set(dic.keys()) for dic in list_of_id_to_whole_condition])
-    id_to_whole_conditions = {
-        key:[ id_to_condition[key] for id_to_condition in list_of_id_to_whole_condition ]
-        for key in common_keys
-    }
-    id_to_scaffold_conditions = {
-        key:[ id_to_condition[key] for id_to_condition in list_of_id_to_scaffold_condition ]
-        for key in common_keys
-    }
+    # Collect condition values of multiple properties.
+    id_to_whole_conditions = {}
+    id_to_scaffold_conditions = {}
+    for key in common_keys:
+        id_to_whole_conditions[key] = [data_dict[key][0] for data_dict in data_dicts]
+        id_to_scaffold_conditions[key] = [data_dict[key][1] for data_dict in data_dicts]
+    return id_to_smiles, id_to_whole_conditions, id_to_scaffold_conditions
 
-    # Filter only the keys common in every property.
-    id_to_smiles = {key:id_to_smiles[key] for key in common_keys}
-    active_keys = [list(set(active_keys_i) & common_keys) for active_keys_i in active_keys]
-    inactive_keys = [list(set(inactive_keys_i) & common_keys) for inactive_keys_i in inactive_keys]
-    return id_to_smiles, id_to_whole_conditions, id_to_scaffold_conditions, active_keys, inactive_keys
-
-def sample_data(active_keys, inactive_keys, size, ratios=None):
+def divide_data(id_to_conditions, boundaries=.5):
     """\
-    Sample active and inactive keys of multiple properties.
+    Divide data by boundary values.
+    Used inside `sample_data`.
 
     Parameters
     ----------
-    active_keys: list[ list[str] ]
-        See `load_data`.
-    inactive_keys: list[ list[str] ]
-        See `load_data`.
+    id_to_conditions: dict[str, list[float]]
+        { ID1: [value_of_property1, value_of_property2, ...], ... }
+    boundaries: float | list[float]
+        (A list of) the boundary value of EACH property.
+        The value needs not be in [0, 1] depending on its range.
+
+    Returns
+    -------
+    high_keys: list[ list[str] ]
+        [ [keys_of_high_property1_values...], [keys_of_high_property2_values...] ]
+    low_keys: list[ list[str] ]
+        [ [keys_of_low_property1_values...], [keys_of_low_property2_values...] ]
+    """
+    # Preprocess
+    num_properties = len(next(iter(id_to_conditions.values())))  # Get one value.
+    if isinstance(boundaries, float):
+        boundaries = [boundaries for _ in range(num_properties)]
+
+    high_keys = [[]] *num_properties
+    low_keys = [[]] *num_properties
+    for key, values in id_to_conditions.items():
+        for i in range(num_properties):
+            if values[i] > boundaries[i]:
+                high_keys[i].append(key)
+            else:
+                low_keys[i].append(key)
+    return high_keys, low_keys
+
+def sample_data(id_to_conditions, size, ratios=.5, boundaries=.5):
+    """\
+    Sample high-valued and low-valued keys of multiple properties by some ratios.
+
+    Parameters
+    ----------
+    id_to_conditions: dict[str, list[float]]
+        { ID1: [value_of_property1, value_of_property2, ...], ... }
     size: int
         The number of samples.
-        If it cannot be divided by the number of properties,
-        remainder samples are sampled totally randomly
-        assuming little change in active/inactive ratios.
-    ratios: float | list[float] | None
-        (A list of) the active-sample ratio of EACH property.
-        If None, 0.5 is used for all.
+    ratio: flaot | list[float]
+        (A list of) the ratio of high-valued samples of EACH property.
+    boundaries: float | list[float]
+        (A list of) the boundary value of EACH property.
+        The value needs not be in [0, 1] depending on its range.
 
     Returns
     -------
@@ -545,25 +602,23 @@ def sample_data(active_keys, inactive_keys, size, ratios=None):
         A list of sampled keys.
     """
     # Preprocess
-    num_properties = len(active_keys)
+    high_keys, low_keys = divide_data(id_to_conditions, boundaries)
+    num_properties = len(next(iter(id_to_conditions.values())))  # Get one value.
     num_each = size // num_properties
     if isinstance(ratios, float):
         ratios = [ratios for _ in range(num_properties)]
-    elif ratios is None:
-        ratios = [0.5 for _ in range(num_properties)]
-    assert num_properties == len(inactive_keys) == len(ratios)
 
     # Sample.
     random.seed()
-    key_pool = np.array(active_keys[0] + inactive_keys[0])
+    key_pool = np.array(high_keys[0] + low_keys[0])
     keys = []
     for i in range(num_properties):
         sample_idxs = random.choices(
-            np.nonzero(np.in1d(key_pool, active_keys[i]))[0],
+            np.nonzero(np.in1d(key_pool, high_keys[i]))[0],
             k = int(num_each * ratios[i])
         )
         sample_idxs += random.choices(
-            np.nonzero(np.in1d(key_pool, inactive_keys[i]))[0],
+            np.nonzero(np.in1d(key_pool, low_keys[i]))[0],
             k = num_each - len(sample_idxs)
         )
         keys.extend(key_pool[sample_idxs])
@@ -573,23 +628,3 @@ def sample_data(active_keys, inactive_keys, size, ratios=None):
     keys.extend(random.choices(key_pool, k=size-len(keys)))
     random.shuffle(keys)
     return keys
-
-def active_ratios(keys, active_keys):
-    """\
-    Check the active-molecule ratio in keys w.r.t. each property.
-
-    Parameters
-    ----------
-    keys: list[str]
-        A list of keys whose activities will be checked.
-    active_keys: list[ list[str] ]
-        See `load_data`.
-
-    Returns
-    -------
-    ratios: 1D ndarray[float]
-        [ active_ratio_of_property1, active_ratio_of_property2, ... ]
-    """
-    activities = np.array([np.in1d(keys, active_keys_i) for active_keys_i in active_keys]).T
-    ratios = activities.sum(0) / len(activities)
-    return ratios
