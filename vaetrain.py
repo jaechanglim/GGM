@@ -126,7 +126,7 @@ if __name__ == '__main__':
     
     #initialize parameters of the model 
     if save_fpath:
-        initial_epoch, initial_cycle = [int(value) for value in re.findall('\d+', save_fpath)]
+        initial_epoch, initial_cycle = [int(value) for value in re.findall('\d+', os.path.basename(save_fpath))]
         shared_model = utils.initialize_model(shared_model, save_fpath)
     else:
         initial_epoch = initial_cycle = 0
