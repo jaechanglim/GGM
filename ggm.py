@@ -1,3 +1,4 @@
+import collections
 import random
 import time
 
@@ -9,33 +10,31 @@ import torch.nn.functional as F
 
 import utils
 
-N_atom_features = 9  # == len(utils.ATOM_SYMBOLS)
-N_bond_features = 5
-N_extra_atom_features = 5
-N_extra_bond_features = 6
+N_atom_features = len(utils.ATOM_SYMBOLS)
+N_bond_features = 5        # See `utils.bond_features`
+N_extra_atom_features = 5  # See `utils.atom_features` and `utils.make_graph`
+N_extra_bond_features = 6  # See `utils.bond_features`
 
 class ggm(torch.nn.Module):
-    def __init__(self, args, N_conditions):
+    def __init__(self, args):
         """\
         Parameters
         ----------
         args: argparse.Namespace
-            Delivers hyperparameters from arguments of `vaetrain.py`.
-            The required arguments are:
-                args.dim_of_node_vector
-                args.dim_of_edge_vector
-                args.dim_of_FC
-        N_conditions: int
-            The number of conditions.
+            Delivers parameters from the arguments of `vaetrain.py`.
+            Currently used attributes are:
+                dim_of_node_vector
+                dim_of_edge_vector
+                dim_of_FC
+                N_conditions
         """
-        super(ggm, self).__init__()
+        super().__init__()
 
-        dim_of_node_vector = args.dim_of_node_vector
+        dim_of_node_vector = self.dim_of_node_vector = args.dim_of_node_vector
         dim_of_edge_vector = args.dim_of_edge_vector
         dim_of_FC = args.dim_of_FC
+        N_conditions = self.N_conditions = args.N_conditions
         self.dim_of_graph_vector = dim_of_node_vector*2
-        self.dim_of_node_vector = dim_of_node_vector 
-        self.N_conditions = N_conditions
          
         self.enc_U = nn.ModuleList([nn.Linear(2*dim_of_node_vector+dim_of_edge_vector+N_conditions, dim_of_node_vector) for k in range(3)])
         self.enc_C = nn.ModuleList([nn.GRUCell(dim_of_node_vector, dim_of_node_vector) for k in range(3)])
@@ -102,8 +101,10 @@ class ggm(torch.nn.Module):
             A scaffold SMILES.
         condition1: list[float]
             [ whole_value1, whole_value2, ... ]
+            Can be an empty list for unconditional training.
         condition2: list[float]
             [ scaffold_value1, scaffold_value2, ... ]
+            Can be an empty list for unconditional training.
 
         Returns
         -------
@@ -157,9 +158,9 @@ class ggm(torch.nn.Module):
         self.embede_graph(g, h)
         self.embede_graph(scaffold_g, scaffold_h)
 
-        # A condition torch.FloatTensor of shape (1, N_conditions):
+        # A condition torch.FloatTensor of shape (N_conditions,):
         # [ whole_value1, whole_value2, ..., scaffold_value1, scaffold_value2 ]
-        condition = utils.create_var(torch.from_numpy(np.array(condition1+condition2)).float().unsqueeze(0))
+        condition = utils.create_var(torch.Tensor(condition1 + condition2))
 
         #encode node state of graph
         self.encode(g, h, condition)
@@ -170,8 +171,9 @@ class ggm(torch.nn.Module):
         #reparameterization trick. this routine is needed for VAE.
         latent_vector, mu, logvar = self.reparameterize(encoded_vector)
         # -> (1, dim_of_node_vector), same, same
-        latent_vector_with_condition = torch.cat([latent_vector, condition], -1)
-        # -> (1, dim_of_node_vector + N_conditions)
+        if condition.shape:
+            latent_vector = torch.cat([latent_vector, condition.view(1,-1)], -1)
+            # -> (1, dim_of_node_vector + N_conditions)
          
         #encode node state of scaffold graph
         self.init_scaffold_state(scaffold_g, scaffold_h, condition)
@@ -182,7 +184,7 @@ class ggm(torch.nn.Module):
 
         for idx in leaves:
             #determine which node type should be added and calculate the loss
-            new_node = self.add_node(scaffold_g, scaffold_h, latent_vector_with_condition)
+            new_node = self.add_node(scaffold_g, scaffold_h, latent_vector)
             # -> (1, N_atom_features)
             add_node_losses.append((-h_save[idx]*torch.log(new_node+1e-6)).sum())
             
@@ -196,7 +198,7 @@ class ggm(torch.nn.Module):
             
             for edge in edge_list:
                 #determin which edge type is added and calculate the corresponding loss
-                new_edge = self.add_edge(scaffold_g, scaffold_h, latent_vector_with_condition)
+                new_edge = self.add_edge(scaffold_g, scaffold_h, latent_vector)
                 # -> (1, N_bond_features)
                 add_edge_losses.append((-edge[0]*torch.log(new_edge+1e-6)).sum())
 
@@ -204,7 +206,7 @@ class ggm(torch.nn.Module):
                 # The answer one-hot whose nonzero index is the partner-atom index:
                 target = utils.create_var(utils.one_hot(torch.FloatTensor([list(scaffold_h.keys()).index(edge[1])]),len(scaffold_h)-1 ))
                 # -> (1, len(scaffold_h)-1)
-                selected_node = self.select_node(scaffold_g, scaffold_h, latent_vector_with_condition).view(target.size())
+                selected_node = self.select_node(scaffold_g, scaffold_h, latent_vector).view(target.size())
                 # -> (1, len(scaffold_h)-1)
                 select_node_losses.append((-target*torch.log(1e-6+selected_node)).sum())
                 
@@ -222,13 +224,13 @@ class ggm(torch.nn.Module):
                 scaffold_g[edge[1]].append(( self.init_edge_state(scaffold_h, edge[0]), idx))
 
             #the edge should not be added more. calculate the corresponding loss
-            new_edge = self.add_edge(scaffold_g, scaffold_h, latent_vector_with_condition)
+            new_edge = self.add_edge(scaffold_g, scaffold_h, latent_vector)
             # Force the termination vector to be [0, 0, ..., 0, 1].
             end_add_edge = utils.create_var(utils.one_hot(torch.FloatTensor([N_bond_features-1]), N_bond_features))
             add_edge_losses.append((-end_add_edge*torch.log(1e-6+new_edge)).sum())
 
         #the node should not be added more. calculate the corresponding loss
-        new_node = self.add_node(scaffold_g, scaffold_h, latent_vector_with_condition)
+        new_node = self.add_node(scaffold_g, scaffold_h, latent_vector)
         # Force the termination vector to be [0, 0, ..., 0, 1].
         end_add_node = utils.create_var(utils.one_hot(torch.FloatTensor([N_atom_features-1]), N_atom_features))
         add_node_losses.append((-end_add_node*torch.log(1e-6+new_node)).sum())
@@ -261,7 +263,7 @@ class ggm(torch.nn.Module):
 
         #select isomer
         isomers = utils.enumerate_molecule(s1)  # ??
-        selected_isomer, target = self.select_isomer(s1, latent_vector_with_condition)
+        selected_isomer, target = self.select_isomer(s1, latent_vector)
         
         #isomer loss
         total_loss4 = (selected_isomer-target).pow(2).sum()
@@ -283,9 +285,11 @@ class ggm(torch.nn.Module):
         condition1: list[float] | None
             [ target_value1, target_value2, ... ]
             If None, target values are sampled from uniform [0, 1].
+            Can be an empty list for unconditional sampling.
         condition2: list[float] | None
             [ scaffold_value1, scaffold_value2, ... ]
             If None, scaffold values are sampled from uniform [0, 1].
+            Can be an empty list for unconditional sampling.
         stochastic: bool
             See `utils.probability_to_one_hot`.
 
@@ -338,11 +342,11 @@ class ggm(torch.nn.Module):
             condition2 = np.random.rand(self.N_conditions//2)
         
         # A condition torch.FloatTensor of shape (1, N_conditions):
-        #condition = utils.create_var(torch.from_numpy(np.concatenate([condition1, condition2], -1)).float())
-        condition = utils.create_var(torch.from_numpy(np.array(condition1+condition2)).float().unsqueeze(0))
+        condition = utils.create_var(torch.Tensor(condition1 + condition2))
         self.init_scaffold_state(scaffold_g, scaffold_h, condition)
-        latent_vector = torch.cat([latent_vector, condition], -1)
-        # -> (1, dim_of_node_vector + N_conditions)
+        if condition.shape:
+            latent_vector = torch.cat([latent_vector, condition.view(1,-1)], -1)
+            # -> (1, dim_of_node_vector + N_conditions)
 
         for null_index1 in range(max_add_nodes):
             new_node = self.add_node(scaffold_g, scaffold_h, latent_vector)  # (1, N_atom_features)
@@ -482,7 +486,7 @@ class ggm(torch.nn.Module):
         edge_list = torch.cat(edge_list, 0)    # (N_edges, dim_of_edge_vector)
         
         #calculate message
-        if condition_vector is None:
+        if condition_vector is None or not condition_vector.shape:
             messages = F.relu(U(torch.cat([node_list1, node_list2, edge_list],-1)))
         else:
             ls = torch.cat([condition_vector for i in range(list(node_list1.size())[0])], 0)

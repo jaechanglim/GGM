@@ -47,11 +47,10 @@ def train(shared_model, optimizer, wholes, scaffolds, whole_conditions, scaffold
         In each cycle, the final shape will be:
             (ncpus, minibatch_size, num_of_losses)
     args: argparse.Namespace
-        Delivers hyperparameters from command arguments to the model.
+        Delivers parameters from command arguments to the model.
     """
     #each thread make new model
-    # Number of conditions <- (number of properties) * 2
-    model=ggm(args, len(args.data_paths)*2)
+    model=ggm(args)
     for idx in range(len(wholes)):
         #set parameters of model as same as that of reference model
         model.load_state_dict(shared_model.state_dict())
@@ -92,76 +91,70 @@ if __name__ == '__main__':
     parser.add_argument('--save_every', help = 'choose how often model will be saved', type = int, default = 200) 
     parser.add_argument('--shuffle_order', help = 'shuffle order or adding node and edge', action='store_true') 
     parser.add_argument('--active_ratio', help='active ratio in sampling (default: no matter)', type=float)
-    parser.add_argument('--save_fpath', help='file path of a saved model to restart') 
+    parser.add_argument('--save_fpath', help='path of a saved model to restart') 
     args = parser.parse_args()
-    save_dir = os.path.expanduser(args.save_dir)
-    smiles_path = os.path.expanduser(args.smiles_path)
-    data_paths = [os.path.expanduser(path) for path in args.data_paths]
+
+    # Process file/directory paths.
+    depath = lambda path: os.path.realpath(os.path.expanduser(path))
+    smiles_path = depath(args.smiles_path)
+    data_paths = [depath(path) for path in args.data_paths]
+    save_fpath = depath(args.save_fpath) if args.save_fpath else None
+    save_dir = depath(args.save_dir)
     if not os.path.isdir(save_dir):
         os.mkdir(save_dir)
 
-    #hyperparameters
-    num_epochs = args.num_epochs
-    ncpus = args.ncpus
-    item_per_cycle = args.item_per_cycle  # Num of data per cycle per CPU.
-    lr = args.lr
-    save_every=args.save_every
-     
+    # Load data.
+    # See `utils.load_data` for the variable structures.
+    id_to_smiles, id_to_whole_conditions, id_to_scaffold_conditions = utils.load_data(smiles_path, *data_paths)
+
+    # Get the number of conditions as a hyperparameter.
+    # `args` delivers the hyperparameters to `ggm.ggm`.
+    args.N_conditions = len(next(iter(id_to_whole_conditions.values()))) + len(next(iter(id_to_scaffold_conditions.values())))
+
     #lines for multiprocessing
     mp.set_start_method('spawn')
     torch.manual_seed(1)
 
     #model 
-    # Number of conditions <- (number of properties) * 2
-    shared_model = ggm(args, len(args.data_paths)*2)
+    shared_model = ggm(args)
     shared_model.share_memory()  # torch.nn.Module.share_memory
 
     #shared optimizer
-    shared_optimizer = SharedAdam(shared_model.parameters(), lr=lr, amsgrad=True)
+    shared_optimizer = SharedAdam(shared_model.parameters(), lr=args.lr, amsgrad=True)
     shared_optimizer.share_memory()
     print ("Model #Params: %dK" % (sum([x.nelement() for x in shared_model.parameters()]) / 1000,))
     
     #initialize parameters of the model 
-    if args.save_fpath:
-        args.save_fpath = os.path.expanduser(args.save_fpath)
-        initial_epoch, initial_cycle = [int(value) for value in re.findall('\d+', args.save_fpath)]
-        shared_model = utils.initialize_model(shared_model, args.save_fpath)
+    if save_fpath:
+        initial_epoch, initial_cycle = [int(value) for value in re.findall('\d+', save_fpath)]
+        shared_model = utils.initialize_model(shared_model, save_fpath)
     else:
         initial_epoch = initial_cycle = 0
         shared_model = utils.initialize_model(shared_model, False)
 
-    # Load data and keys.
-    # See `utils.load_data` for the variable structures.
-    if args.data_paths:
-        id_to_smiles, id_to_whole_conditions, id_to_scaffold_conditions = utils.load_data(smiles_path, *data_paths)
-    # Only load SMILESs.
-    # This is for the future implementation of unconditional training.
-    else:
-        id_to_smiles = utils.dict_from_txt(arsg.smiles_path)
-
-    num_cycles = int(len(id_to_smiles)/ncpus/item_per_cycle)
+    num_cycles = int(len(id_to_smiles)/args.ncpus/args.item_per_cycle)
     print(f"""\
-ncpus             : {ncpus}
+ncpus             : {args.ncpus}
 OMP_NUM_THREADS   : {os.environ.get('OMP_NUM_THREADS')}
 Number of data    : {len(id_to_smiles)}
-Number of epochs  : {num_epochs}
+Number of epochs  : {args.num_epochs}
 Number of cycles  : {num_cycles} per epoch
-Minibatch size    : {item_per_cycle} per CPU per cycle
-Learning rate     : {lr}
+Minibatch size    : {args.item_per_cycle} per CPU per cycle
+Learning rate     : {args.lr}
 dim_of_node_vector: {args.dim_of_node_vector}
 dim_of_edge_vector: {args.dim_of_edge_vector}
 dim_of_FC         : {args.dim_of_FC}
 beta1             : {args.beta1}
-SMILES data path  : {os.path.abspath(args.smiles_path)}
+SMILES data path  : {smiles_path}
 Data directories  : {data_paths}
-Save directory    : {os.path.abspath(save_dir)}
-Save model every  : {save_every} cycles per epoch (Total {num_epochs*(num_cycles//save_every+1)} models)
+Save directory    : {save_dir}
+Save model every  : {args.save_every} cycles per epoch (Total {args.num_epochs*(num_cycles//args.save_every+1)} models)
 shuffle_order     : {args.shuffle_order}
-Restart from      : {os.path.abspath(args.save_fpath) if args.save_fpath else None}
+Restart from      : {save_fpath}
 """)
     
     print("epoch  cyc  totcyc  loss  loss1  loss2  loss3  time")
-    for epoch in range(num_epochs):
+    for epoch in range(args.num_epochs):
         # Jump to the previous epoch for restart.
         if epoch < initial_epoch:
             continue
@@ -172,19 +165,19 @@ Restart from      : {os.path.abspath(args.save_fpath) if args.save_fpath else No
                     continue
             retval_list = mp.Manager().list()  # Is this needed?
             # List of multiprocessing.managers.ListProxy to collect losses
-            retval_list = [mp.Manager().list() for i in range(ncpus)]
+            retval_list = [mp.Manager().list() for i in range(args.ncpus)]
             st = time.time()
             processes = []
-            for pid in range(ncpus):
+            for pid in range(args.ncpus):
                 # Sample keys without considering activeness.
                 if args.active_ratio is None:
-                    keys = random.sample(id_to_smiles.keys(), item_per_cycle)
+                    keys = random.sample(id_to_smiles.keys(), args.item_per_cycle)
                 # Sample active and inactive keys by the required ratio.
                 else:
-                    keys = utils.sample_data(id_to_whole_conditions, item_per_cycle, args.active_ratio)
+                    keys = utils.sample_data(id_to_whole_conditions, args.item_per_cycle, args.active_ratio)
 
-                # Property (descriptor) values work as conditions;
-                # we need both values of whole molecules and scaffolds.
+                # Property (descriptor) values work as conditions.
+                # We need both of whole and scaffold values.
                 # whole_conditions := [
                 #     [ value1, value2, ... ],  # condition values of whole 1
                 #     [ value1, value2, ... ],  # condition values of whole 2
@@ -192,9 +185,9 @@ Restart from      : {os.path.abspath(args.save_fpath) if args.save_fpath else No
                 whole_conditions = [id_to_whole_conditions[key] for key in keys]
                 scaffold_conditions = [id_to_scaffold_conditions[key] for key in keys]
 
-                # We need SMILESs of whole molecules and scaffolds to make molecule graphs.
-                wholes = [id_to_smiles[key][0] for key in keys]     # list of whole SMILESs
-                scaffolds = [id_to_smiles[key][1] for key in keys]  # list of scaffold SMILESs
+                # SMILESs of whole molecules and scaffolds.
+                wholes = [id_to_smiles[key][0] for key in keys]
+                scaffolds = [id_to_smiles[key][1] for key in keys]
 
                 proc = mp.Process(target=train, args=(shared_model, shared_optimizer, wholes, scaffolds, whole_conditions, scaffold_conditions, pid, retval_list, args))
                 proc.start()
@@ -210,6 +203,6 @@ Restart from      : {os.path.abspath(args.save_fpath) if args.save_fpath else No
             loss2 = np.mean(np.array([losses[2] for k in retval_list for losses in k]))
             loss3 = np.mean(np.array([losses[3] for k in retval_list for losses in k]))
             print ('%s\t%s\t%s\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f' %(epoch, cycle, epoch*num_cycles+cycle, loss, loss1, loss2, loss3, end-st))
-            if cycle%save_every == 0:
+            if cycle%args.save_every == 0:
                 name = save_dir+'/save_'+str(epoch)+'_' + str(cycle)+'.pt'
                 torch.save(shared_model.state_dict(), name)

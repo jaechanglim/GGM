@@ -50,7 +50,7 @@ def sample(shared_model, wholes, scaffolds, condition1, condition2, pid, retval_
         Delivers hyperparameters from command arguments to the model.
     """
     #optimizer = optim.Adam(shared_model.parameters(), lr=1e-4)
-    model=ggm(args, len(condition1) + len(condition2))
+    model=ggm(args)
     st1 = time.time()
 
     for idx, (s1,s2) in enumerate(zip(wholes, scaffolds)):
@@ -79,19 +79,17 @@ if __name__ == '__main__':
     parser.add_argument('--dim_of_FC', help = 'dimension of FC', type = int, default = 128) 
     parser.add_argument('--save_fpath', help = 'file path of saved model', type = str) 
     parser.add_argument('--scaffold', help = 'smiles of scaffold', type = str) 
-    parser.add_argument('--target_properties', help = 'values of target properties', nargs='+', type = float) 
-    parser.add_argument('--scaffold_properties', help = 'values of scaffold properties', nargs='+', type = float) 
+    parser.add_argument('--target_properties', help='values of target properties', nargs='+', default=[], type=float) 
+    parser.add_argument('--scaffold_properties', help='values of scaffold properties', nargs='+', default=[], type=float) 
     parser.add_argument('--output_filename', help = 'output file name', type = str) 
-    parser.add_argument('--minimum_values', help = 'minimum values of properties. It will be used for normalization', nargs='+', type = float) 
-    parser.add_argument('--maximum_values', help = 'maximum values of properties. It will be used for normalization', nargs='+', type = float) 
+    parser.add_argument('--minimum_values', help='minimum values of properties. It will be used for normalization', nargs='+', default=[], type=float) 
+    parser.add_argument('--maximum_values', help = 'maximum values of properties. It will be used for normalization', nargs='+', default=[], type=float) 
     parser.add_argument('--stochastic', help = 'stocahstically add node and edge', action='store_true') 
     args = parser.parse_args()
     
     #hyperparameters
-    ncpus = args.ncpus
-    item_per_cycle = args.item_per_cycle
-    save_fpath = os.path.expanduser(args.save_fpath)
-    output_filename = os.path.expanduser(args.output_filename)
+    save_fpath = os.path.realpath(os.path.expanduser(args.save_fpath))
+    output_filename = os.path.realpath(os.path.expanduser(args.output_filename))
 
     # Normalize the property values to be in [0, 1].
     target_properties = [normalize(*values) for values in zip(args.target_properties, args.maximum_values, args.minimum_values)]
@@ -102,16 +100,17 @@ if __name__ == '__main__':
     torch.manual_seed(1)
 
     #model 
-    shared_model = ggm(args, len(target_properties) + len(scaffold_properties))
+    args.N_conditions = len(target_properties) + len(scaffold_properties)
+    shared_model = ggm(args)
     shared_model.share_memory()
 
     print ("Model #Params: %dK" % (sum([x.nelement() for x in shared_model.parameters()]) / 1000,))
     print(f"""\
-ncpus             : {ncpus}
+ncpus             : {args.ncpus}
 OMP_NUM_THREADS   : {os.environ.get('OMP_NUM_THREADS')}
-Num of generations: {item_per_cycle} per CPU (Total {ncpus*item_per_cycle})
-Model path        : {os.path.abspath(save_fpath)}
-Output path       : {os.path.abspath(output_filename)}
+Num of generations: {args.item_per_cycle} per CPU (Total {args.ncpus*args.item_per_cycle})
+Model path        : {save_fpath}
+Output path       : {output_filename}
 Scaffold          : {args.scaffold}
 Scaffold values   : {args.scaffold_properties} -> {scaffold_properties}
 Target values     : {args.target_properties} -> {target_properties}
@@ -125,19 +124,19 @@ stochastic        : {args.stochastic}
     shared_model = utils.initialize_model(shared_model, save_fpath)
     
     # Copy the same scaffold SMILES for multiple generations.
-    scaffolds = [args.scaffold for i in range(item_per_cycle)]
+    scaffolds = [args.scaffold for i in range(args.item_per_cycle)]
     # A whole SMILES can be given and become a latent vector for decoding,
     # but here it is given as None so that a latent is randomly sampled.
-    wholes = [None for i in range(item_per_cycle)]
+    wholes = [None for i in range(args.item_per_cycle)]
     condition1 = target_properties.copy()
     condition2 = scaffold_properties.copy()
     
     # A list of multiprocessing.managers.ListProxy to collect SMILES
-    retval_list = [mp.Manager().list() for i in range(ncpus)]
+    retval_list = [mp.Manager().list() for i in range(args.ncpus)]
     st = time.time()
     processes = []
     
-    for pid in range(ncpus):
+    for pid in range(args.ncpus):
         p = mp.Process(target=sample, args=(shared_model, wholes, scaffolds, condition1, condition2, pid, retval_list, args))
         p.start()
         processes.append(p)

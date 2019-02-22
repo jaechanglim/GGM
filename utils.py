@@ -15,17 +15,13 @@ import torch.nn as nn
 
 ATOM_SYMBOLS = ['C', 'N', 'O', 'S', 'F', 'P', 'Cl', 'Br', 'D']
 
-def create_var(tensor, requires_grad=None): 
+def create_var(tensor, requires_grad=False): 
     """\
     create_var(...) -> torch.autograd.Variable
 
     Wrap a torch.Tensor object by torch.autograd.Variable.
     """
-    if requires_grad is None: 
-        #return Variable(tensor)
-        return Variable(tensor)
-    else: 
-        return Variable(tensor,requires_grad=requires_grad)
+    return Variable(tensor, requires_grad=requires_grad)
 
 def one_of_k_encoding_unk(x, allowable_set):
     #"""Maps inputs not in the allowable set to the last element."""
@@ -58,8 +54,13 @@ def bond_features(bond, include_extra = False):
     bond_features(...) -> list[int]
 
     One-hot encode `bond` w/ or w/o extra concatenation.
+
+    Parameters
+    ----------
+    bond: rdkit.Chem.Bond
+    include_extra: bool
     """
-    bt = bond.GetBondType()  # rdkit.Chem,BondType
+    bt = bond.GetBondType()  # rdkit.Chem.BondType
     retval = [
       bt == Chem.rdchem.BondType.SINGLE, bt == Chem.rdchem.BondType.DOUBLE,
       bt == Chem.rdchem.BondType.TRIPLE, bt == Chem.rdchem.BondType.AROMATIC,
@@ -548,7 +549,9 @@ def load_data(smiles_path, *data_paths):
 def divide_data(id_to_conditions, boundaries=.5):
     """\
     Divide data by boundary values.
+
     Used inside `sample_data`.
+    If `id_to_conditions.values()` are all empty, ([], []) is returned.
 
     Parameters
     ----------
@@ -584,6 +587,8 @@ def sample_data(id_to_conditions, size, ratios=.5, boundaries=.5):
     """\
     Sample high-valued and low-valued keys of multiple properties by some ratios.
 
+    If `id_to_conditions.values()` are all empty, random sampling is done.
+
     Parameters
     ----------
     id_to_conditions: dict[str, list[float]]
@@ -602,14 +607,17 @@ def sample_data(id_to_conditions, size, ratios=.5, boundaries=.5):
         A list of sampled keys.
     """
     # Preprocess
+    random.seed()
     high_keys, low_keys = divide_data(id_to_conditions, boundaries)
     num_properties = len(next(iter(id_to_conditions.values())))  # Get one value.
+    # Return random samples if no property is present.
+    if not num_properties:
+        return random.sample(list(id_to_conditions.keys()), k=size)
     num_each = size // num_properties
     if isinstance(ratios, float):
         ratios = [ratios for _ in range(num_properties)]
 
     # Sample.
-    random.seed()
     key_pool = np.array(high_keys[0] + low_keys[0])
     keys = []
     for i in range(num_properties):

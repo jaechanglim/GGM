@@ -19,6 +19,8 @@ python -u vaetrain.py \
     --data_paths data_egfr/mw/data_normalized.txt data_egfr/logp/data_normalized.txt data_egfr/sas/data_normalized.txt \
     --beta1 0.1 1> train.out 2> train.err
 ```
+For **unconditional training**, omit `--data_paths`.
+
 Content of `train.out` after input information would be like this:
 ```
 epoch   cyc     totcyc  loss    loss1   loss2   loss3   time
@@ -56,3 +58,4 @@ python sample.py \
     --maximum_values 550 8 5 \
     --stochastic
 ```
+For **sampling using an unconditioned  model**, omit `--target_properties`, `--scaffold_properties`, `--minimum_values` and `--maximum_values`.
