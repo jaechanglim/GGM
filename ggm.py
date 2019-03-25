@@ -50,19 +50,9 @@ class ggm(torch.nn.Module):
         
         self.prop_select_node_U = nn.ModuleList([nn.Linear(3*dim_of_node_vector+dim_of_edge_vector+N_conditions, dim_of_node_vector) for k in range(2)])
         self.prop_select_node_C = nn.ModuleList([nn.GRUCell(dim_of_node_vector, dim_of_node_vector) for k in range(2)])
-
+        
         self.prop_select_isomer_U = nn.ModuleList([nn.Linear(3*dim_of_node_vector+dim_of_edge_vector+N_conditions, dim_of_node_vector) for k in range(2)])
         self.prop_select_isomer_C = nn.ModuleList([nn.GRUCell(dim_of_node_vector, dim_of_node_vector) for k in range(2)])
-
-        self.prop_U = nn.ModuleList([nn.Linear(
-            2* dim_of_node_vector + dim_of_edge_vector,
-            dim_of_node_vector) for k in range(2)])
-        self.prop_C = nn.ModuleList(
-            [nn.GRUCell(dim_of_node_vector, dim_of_node_vector) for k in
-             range(2)])
-        self.prop_fc = nn.Linear(
-            self.dim_of_graph_vector,
-            dim_of_FC)
         
         self.add_node1 = nn.Linear(self.dim_of_graph_vector+dim_of_node_vector+N_conditions, dim_of_FC)
         self.add_node2 = nn.Linear(dim_of_FC, dim_of_FC)
@@ -273,11 +263,6 @@ class ggm(torch.nn.Module):
 
         #select isomer
         isomers = utils.enumerate_molecule(s1)  # ??
-
-        loss5=0.0
-        if y_true is not None:
-            y_pred = self.pred()
-            loss5 = torch.pow(y-y_pred,2)
         selected_isomer, target = self.select_isomer(s1, latent_vector)
         
         #isomer loss
