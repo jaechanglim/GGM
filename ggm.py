@@ -37,9 +37,11 @@ class ggm(torch.nn.Module):
         N_conditions = self.N_conditions = args.N_conditions
         self.dim_of_graph_vector = dim_of_node_vector * 2
 
-        self.enc_U = nn.ModuleList([nn.Linear(
-            2 * dim_of_node_vector + dim_of_edge_vector + N_conditions,
-            dim_of_node_vector) for k in range(3)])
+        self.enc_U = \
+            nn.ModuleList([nn.Linear(2 * dim_of_node_vector
+                                     + dim_of_edge_vector
+                                     + N_conditions,dim_of_node_vector)
+                          for _ in range(3)])
         self.enc_C = nn.ModuleList(
             [nn.GRUCell(dim_of_node_vector, dim_of_node_vector) for k in
              range(3)])
