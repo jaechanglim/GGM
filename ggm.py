@@ -161,6 +161,9 @@ class ggm(torch.nn.Module):
         # A condition torch.FloatTensor of shape (N_conditions,):
         # [ whole_value1, whole_value2, ..., scaffold_value1, scaffold_value2 ]
         condition = utils.create_var(torch.Tensor(condition1 + condition2))
+        # (N_condition,) -> (1, N_conditions)
+        if condition.shape:
+            condition = condition.unsqueeze(0)
 
         #encode node state of graph
         self.encode(g, h, condition)
