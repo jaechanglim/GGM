@@ -174,9 +174,8 @@ class ggm(torch.nn.Module):
         #reparameterization trick. this routine is needed for VAE.
         latent_vector, mu, logvar = self.reparameterize(encoded_vector)
         # -> (1, dim_of_node_vector), same, same
-        if condition.shape:
-            latent_vector = torch.cat([latent_vector, condition.view(1,-1)], -1)
-            # -> (1, dim_of_node_vector + N_conditions)
+        latent_vector = torch.cat([latent_vector, condition], -1)
+        # -> (1, dim_of_node_vector + N_conditions)
          
         #encode node state of scaffold graph
         self.init_scaffold_state(scaffold_g, scaffold_h, condition)
@@ -346,10 +345,11 @@ class ggm(torch.nn.Module):
         
         # A condition torch.FloatTensor of shape (1, N_conditions):
         condition = utils.create_var(torch.Tensor(condition1 + condition2))
-        self.init_scaffold_state(scaffold_g, scaffold_h, condition)
         if condition.shape:
-            latent_vector = torch.cat([latent_vector, condition.view(1,-1)], -1)
-            # -> (1, dim_of_node_vector + N_conditions)
+            condition = condition.unsqueeze(0)
+        latent_vector = torch.cat([latent_vector, condition], -1)
+        # -> (1, dim_of_node_vector + N_conditions)
+        self.init_scaffold_state(scaffold_g, scaffold_h, condition)
 
         for null_index1 in range(max_add_nodes):
             new_node = self.add_node(scaffold_g, scaffold_h, latent_vector)  # (1, N_atom_features)
