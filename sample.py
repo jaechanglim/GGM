@@ -4,6 +4,7 @@ import os
 import time
 
 import numpy as np
+from rdkit import Chem
 import torch
 from torch.autograd import Variable
 import torch.multiprocessing as mp
@@ -146,11 +147,17 @@ stochastic        : {args.stochastic}
     end = time.time()       
 
     # retval_list shape -> (ncpus, item_per_cycle, 2)
-    valid = [j[1] for k in retval_list for j in k]  # list of new SMILESs
-    valid = [v for v in valid if v is not None]
+    generations = [j[1] for k in retval_list for j in k]  # list of new SMILESs
+
+    # Check valid generations.
+    scaffoldMol = Chem.MolFromSmiles(args.scaffold)
+    valid = [smiles for smiles in generations if smiles is not None
+        and Chem.MolFromSmiles(smiles).HasSubStructMatch(scaffoldMol)]
     print ('before remove duplicate:', len(valid))
+    # Remove duplicates.
     valid = list(set(valid))
     print ('after remove duplicate', len(valid))
+
     w = open(args.output_filename, 'w')
     w.write(scaffolds[0]+'\toriginal\tegfr\n')
     for idx in range(len(valid)):

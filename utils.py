@@ -227,6 +227,11 @@ def BO_to_smiles(atomic_symbols, BO, fc_list=None) -> str:
     atomic_symbols: list[str]
     BO: 2D-ndarray of float or int
     fc_list: None | list[int]
+
+    Returns
+    -------
+    smiles: str | None
+        If a valid SMILES cannot be made, None is returned.
     """
     natoms = len(atomic_symbols)
     nbonds = int(np.count_nonzero(BO)/2)
@@ -254,10 +259,12 @@ def BO_to_smiles(atomic_symbols, BO, fc_list=None) -> str:
         w.write('$$$$')
     # Rewrite the SDF using `babel`.
     os.system(f'babel -isdf {sdf_path} -osdf {sdf_path} 2> {os.devnull}')
-    # Get a SMILES.
+    # Get a SMILES if valid.
     try:
         m = Chem.SDMolSupplier(sdf_path)[0]
         s = Chem.MolToSmiles(m)
+        # Final validation.
+        s = Chem.MolToSmiles(Chem.MolFromSmiles(s))
     finally:
         os.unlink(sdf_path)
     return s
