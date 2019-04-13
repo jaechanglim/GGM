@@ -152,7 +152,7 @@ stochastic        : {args.stochastic}
     # Check valid generations.
     scaffoldMol = Chem.MolFromSmiles(args.scaffold)
     valid = [smiles for smiles in generations if smiles is not None
-        and Chem.MolFromSmiles(smiles).HasSubStructMatch(scaffoldMol)]
+        and Chem.MolFromSmiles(smiles).HasSubstructMatch(scaffoldMol)]
     print ('before remove duplicate:', len(valid))
     # Remove duplicates.
     valid = list(set(valid))
