@@ -46,8 +46,7 @@ def atom_features(atom, include_extra = False):
     retval  = one_of_k_encoding_unk(atom.GetSymbol(), ATOM_SYMBOLS)
     if include_extra:
         retval += [#atom.GetDegree(),
-            atom.GetFormalCharge()
-           ]
+                   atom.GetFormalCharge()]
     return retval
 
 def bond_features(bond, include_extra = False):
@@ -183,7 +182,6 @@ def cal_formal_charge(atomic_symbol, bonds) -> int:
     bonds: list[tuple[str, int]]
         [ (atom_symbol, bond_order), ... ]
     """
-
     if atomic_symbol=='N':
         #if sorted(bonds, key=lambda x: (x[0], x[1])) == [('C', 1), ('O', 1), ('O', 2)]:
         #    return 1
@@ -226,16 +224,15 @@ def graph_to_smiles(g, h) -> str:
     #print (fc_list)
     if len(fc_list)==0:
         fc_list = None
-    smiles = BO_to_smiles(atomic_symbols, BO, idx_to_atom, atom_to_idx, fc_list)
+    smiles = BO_to_smiles(atomic_symbols, BO, fc_list)
     return smiles
 
-def BO_to_smiles(atomic_symbols, BO, idx_to_atom, atom_to_idx, fc_list=None) -> str:
+def BO_to_smiles(atomic_symbols, BO, fc_list=None) -> str:
     """\
-    Obtain a SMILES str from atom symbols, bond orders and formal charges.
+    Obtain a SMILES str corresponding to the given atom and bond types.
 
-    During the routine, a temporary SDF file is written,
-    the file content is cleaned by externally executing `babel`,
-    and finally it is read by RDKit to get a SMILES.
+    During the routine, a temporary SDF file is written
+    and read by RDKit to get a SMILES.
 
     Parameters
     ----------
@@ -374,9 +371,11 @@ def make_graphs(s1, s2, extra_atom_feature = False, extra_bond_feature = False):
     """\
     make_graphs(...) -> edge_dict_1, node_dict_1, edge_dict_2, node_dict_2
 
-    Similar to `make_graph`, but adjust the node indices of `s1` according to `s2`
-    (refer to `index_rearrange` for details).
-    Typically, `s1` is a whole SMILES and `s2` a scaffold SMILES.
+    Make graphs of `s1` and `s2` using `make_graph`.
+
+    `s2` must be a substructure of `s1`; otherwise None's are returned.
+    A graph of `s1` is first made, from which that of `s2` is extracted
+    so that the indices of the shared atoms are the same.
     """
     molecule1 = Chem.MolFromSmiles(s1)
     molecule2 = Chem.MolFromSmiles(s2)
