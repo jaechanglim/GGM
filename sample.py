@@ -1,19 +1,13 @@
 import argparse
-from collections import OrderedDict
 import os
 import time
 
-import numpy as np
 import torch
-from torch.autograd import Variable
 import torch.multiprocessing as mp
-from torch.multiprocessing import Pool
-import torch.nn as nn
-import torch.optim as optim
 
 from ggm import ggm
-from shared_optim import SharedRMSprop, SharedAdam
 import utils
+
 
 def normalize(v, max_v, min_v):
     """v -> v' in [0, 1]"""

@@ -94,7 +94,7 @@ def make_graph(smiles, extra_atom_feature = False, extra_bond_feature = False):
 
     Returns
     -------
-    g: OrderedDict[int, list[tuple[torch.autogra.Variable, int]]] | None
+    g: OrderedDict[int, list[tuple[torch.autograd.Variable, int]]] | None
         Edge (bond) dictionary, which looks like:
             { atom_idx: [ (one_hot_vector, partner_atom_idx), ... ], ... }
     h: OrderedDict[int, torch.autograd.Variable] | None
@@ -126,12 +126,12 @@ def make_graph(smiles, extra_atom_feature = False, extra_bond_feature = False):
                     atom_i += [0, 0, 1]
             else:
                 atom_i += [1, 0, 0]
-        h[i] = create_var(torch.FloatTensor(atom_i), False).view(1, -1)
+        h[i] = torch.FloatTensor(atom_i, requires_grad=False).view(1, -1)
         for j in range(0, molecule.GetNumAtoms()):
             e_ij = molecule.GetBondBetweenAtoms(i, j)  # rdkit.Chem.Bond
             if e_ij != None:
                 e_ij = list(map(lambda x: 1 if x == True else 0, bond_features(e_ij, extra_bond_feature))) # ADDED edge feat; one-hot vector
-                e_ij = create_var(torch.FloatTensor(e_ij).view(1, -1), False)
+                e_ij = torch.FloatTensor(e_ij, requires_grad=False).view(1, -1)
                 atom_j = molecule.GetAtomWithIdx(j)
                 if i not in g:
                     g[i] = []
@@ -595,7 +595,7 @@ def sample_data(id_to_conditions, size, ratios=.5, boundaries=.5):
         { ID1: [value_of_property1, value_of_property2, ...], ... }
     size: int
         The number of samples.
-    ratio: flaot | list[float]
+    ratio: float | list[float]
         (A list of) the ratio of high-valued samples of EACH property.
     boundaries: float | list[float]
         (A list of) the boundary value of EACH property.
@@ -636,3 +636,4 @@ def sample_data(id_to_conditions, size, ratios=.5, boundaries=.5):
     keys.extend(random.choices(key_pool, k=size-len(keys)))
     random.shuffle(keys)
     return keys
+

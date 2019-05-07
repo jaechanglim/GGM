@@ -59,3 +59,6 @@ python sample.py \
     --stochastic
 ```
 For **sampling using an unconditioned  model**, omit `--target_properties`, `--scaffold_properties`, `--minimum_values` and `--maximum_values`.
+
+
+OMP_NUM_THREADS=1 python ./train/vaetrain.py --num_epochs 10 --ncpus 15 --smiles_path data_egfr/id_smiles.txt --data_paths data_egfr/logp/data_normalized.txt data_egfr/qed/data_normalized.txt --save_dir . 

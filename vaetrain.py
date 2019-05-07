@@ -1,5 +1,4 @@
 import argparse
-from collections import OrderedDict
 import os
 import random
 import re
@@ -8,13 +7,11 @@ import time
 import numpy as np
 import torch
 import torch.multiprocessing as mp
-from torch.multiprocessing import Pool
-import torch.nn as nn
-import torch.optim as optim
 
 from ggm import ggm
-from shared_optim import SharedRMSprop, SharedAdam
+from shared_optim import SharedAdam
 import utils
+
 
 def train(shared_model, optimizer, wholes, scaffolds, whole_conditions, scaffold_conditions, pid, retval_list, args):
     """\

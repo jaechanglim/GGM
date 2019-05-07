@@ -1,6 +1,4 @@
-import collections
 import random
-import time
 
 import numpy as np
 from rdkit import Chem
@@ -16,7 +14,8 @@ N_extra_atom_features = 5  # See `utils.atom_features` and `utils.make_graph`
 N_extra_bond_features = 6  # See `utils.bond_features`
 
 
-class ggm(torch.nn.Module):
+class ggm(nn.Module):
+
     def __init__(self, args):
         """\
         Parameters
@@ -29,67 +28,94 @@ class ggm(torch.nn.Module):
                 dim_of_FC
                 N_conditions
         """
-        super().__init__()
+        super(ggm, self).__init__()
 
         dim_of_node_vector = self.dim_of_node_vector = args.dim_of_node_vector
         dim_of_edge_vector = args.dim_of_edge_vector
         dim_of_FC = args.dim_of_FC
         N_conditions = self.N_conditions = args.N_conditions
+
         self.dim_of_graph_vector = dim_of_node_vector * 2
 
         self.enc_U = \
             nn.ModuleList([nn.Linear(2 * dim_of_node_vector
                                      + dim_of_edge_vector
-                                     + N_conditions,dim_of_node_vector)
+                                     + N_conditions, dim_of_node_vector)
                           for _ in range(3)])
-        self.enc_C = nn.ModuleList(
-            [nn.GRUCell(dim_of_node_vector, dim_of_node_vector) for k in
-             range(3)])
+        self.enc_C = \
+            nn.ModuleList([nn.GRUCell(dim_of_node_vector, dim_of_node_vector)
+                           for _ in range(3)])
 
-        self.init_scaffold_U = nn.ModuleList([nn.Linear(
-            2 * dim_of_node_vector + dim_of_edge_vector + N_conditions,
-            dim_of_node_vector) for k in range(3)])
-        self.init_scaffold_C = nn.ModuleList(
-            [nn.GRUCell(dim_of_node_vector, dim_of_node_vector) for k in
-             range(3)])
+        self.init_scaffold_U = \
+            nn.ModuleList([nn.Linear(2 * dim_of_node_vector
+                                     + dim_of_edge_vector
+                                     + N_conditions, dim_of_node_vector)
+                           for _ in range(3)])
+        self.init_scaffold_C =\
+            nn.ModuleList([nn.GRUCell(dim_of_node_vector, dim_of_node_vector)
+                           for _ in range(3)])
 
-        self.prop_add_node_U = nn.ModuleList([nn.Linear(
-            3 * dim_of_node_vector + dim_of_edge_vector + N_conditions,
-            dim_of_node_vector) for k in range(2)])
-        self.prop_add_node_C = nn.ModuleList(
-            [nn.GRUCell(dim_of_node_vector, dim_of_node_vector) for k in
-             range(2)])
+        self.prop_add_node_U = \
+            nn.ModuleList([nn.Linear(3 * dim_of_node_vector
+                                     + dim_of_edge_vector
+                                     + N_conditions, dim_of_node_vector)
+                           for _ in range(2)])
+        self.prop_add_node_C = \
+            nn.ModuleList([nn.GRUCell(dim_of_node_vector, dim_of_node_vector)
+                           for _ in range(2)])
 
-        self.prop_add_edge_U = nn.ModuleList([nn.Linear(
-            3 * dim_of_node_vector + dim_of_edge_vector + N_conditions,
-            dim_of_node_vector) for k in range(2)])
-        self.prop_add_edge_C = nn.ModuleList(
-            [nn.GRUCell(dim_of_node_vector, dim_of_node_vector) for k in
-             range(2)])
+        self.prop_add_edge_U = \
+            nn.ModuleList([nn.Linear(3 * dim_of_node_vector
+                                     + dim_of_edge_vector
+                                     + N_conditions, dim_of_node_vector)
+                           for _ in range(2)])
+        self.prop_add_edge_C = \
+            nn.ModuleList([nn.GRUCell(dim_of_node_vector, dim_of_node_vector)
+                           for _ in range(2)])
 
-        self.prop_select_node_U = nn.ModuleList([nn.Linear(
-            3 * dim_of_node_vector + dim_of_edge_vector + N_conditions,
-            dim_of_node_vector) for k in range(2)])
-        self.prop_select_node_C = nn.ModuleList(
-            [nn.GRUCell(dim_of_node_vector, dim_of_node_vector) for k in
-             range(2)])
+        self.prop_select_node_U = \
+            nn.ModuleList([nn.Linear(3 * dim_of_node_vector
+                                     + dim_of_edge_vector
+                                     + N_conditions, dim_of_node_vector)
+                           for _ in range(2)])
+        self.prop_select_node_C = \
+            nn.ModuleList([nn.GRUCell(dim_of_node_vector, dim_of_node_vector)
+                           for _ in range(2)])
 
-        self.prop_select_isomer_U = nn.ModuleList([nn.Linear(
-            3 * dim_of_node_vector + dim_of_edge_vector + N_conditions,
-            dim_of_node_vector) for k in range(2)])
-        self.prop_select_isomer_C = nn.ModuleList(
-            [nn.GRUCell(dim_of_node_vector, dim_of_node_vector) for k in
-             range(2)])
+        self.prop_select_isomer_U = \
+            nn.ModuleList([nn.Linear(3 * dim_of_node_vector
+                                     + dim_of_edge_vector
+                                     + N_conditions, dim_of_node_vector)
+                           for _ in range(2)])
+        self.prop_select_isomer_C = \
+            nn.ModuleList([nn.GRUCell(dim_of_node_vector, dim_of_node_vector)
+                           for _ in range(2)])
 
-        self.prop_U = nn.ModuleList([nn.Linear(
-            2 * dim_of_node_vector + dim_of_edge_vector,
-            dim_of_node_vector) for k in range(2)])
-        self.prop_C = nn.ModuleList(
-            [nn.GRUCell(dim_of_node_vector, dim_of_node_vector) for k in
-             range(2)])
-        self.prop_fc = nn.Linear(
-            self.dim_of_graph_vector,
-            dim_of_FC)
+        self.prop_predict_U = \
+            nn.ModuleList([nn.Linear(2 * dim_of_node_vector
+                                     + dim_of_edge_vector,
+                                     dim_of_node_vector)
+                           for _ in range(2)])
+        self.prop_predict_C = \
+            nn.ModuleList([nn.GRUCell(dim_of_node_vector, dim_of_node_vector)
+                           for _ in range(2)])
+        self.prop_predict_fc = \
+            nn.ModuleList([nn.Linear(dim_of_node_vector, dim_of_FC),
+                           nn.Linear(dim_of_FC, N_conditions)])
+
+        self.add_node_fc = nn.ModuleList()
+        for k in range(3):
+            if k == 0:
+                layers = [nn.Linear(self.dim_of_graph_vector
+                                    + dim_of_node_vector
+                                    + N_conditions, dim_of_FC),
+                          nn.ReLU()]
+            elif k == 2:
+                layers = [nn.Linear(dim_of_FC, N_atom_features),
+                          nn.ReLU()]
+            else:
+                layers = [nn.Linear(dim_of_FC, dim_of_FC)]
+            self.add_node += layers
 
         self.add_node1 = nn.Linear(
             self.dim_of_graph_vector + dim_of_node_vector + N_conditions,
@@ -200,8 +226,8 @@ class ggm(torch.nn.Module):
         #     to which new initialized state vectors will be added.
 
         # Make graph of molecule and scaffold WITHOUT extra atom/bond features.
-        g_save, h_save, scaffold_g_save, scaffold_h_save = utils.make_graphs(s1,
-                                                                             s2)
+        g_save, h_save, scaffold_g_save, scaffold_h_save \
+            = utils.make_graphs(s1, s2)
         if g_save is None and h_save is None:
             return None
 
@@ -215,7 +241,7 @@ class ggm(torch.nn.Module):
         add_edge_losses = []
         select_node_losses = []
 
-        # embede node state of graph
+        # embed node state of graph
         self.embede_graph(g, h)
         self.embede_graph(scaffold_g, scaffold_h)
 
@@ -342,15 +368,17 @@ class ggm(torch.nn.Module):
 
         # select isomer
         isomers = utils.enumerate_molecule(s1)  # ??
-
-        loss5 = 0.0
-        if y_true is not None:
-            y_pred = self.pred()
-            loss5 = torch.pow(y - y_pred, 2)
         selected_isomer, target = self.select_isomer(s1, latent_vector)
 
         # isomer loss
         total_loss4 = (selected_isomer - target).pow(2).sum()
+
+        # predictor loss
+        loss5 = 0.0
+        if y_true is not None:
+            y_pred = self.pred()
+            loss5 = torch.pow(y - y_pred, 2)
+
         return scaffold_g, scaffold_h, total_loss1, total_loss2, total_loss4
 
     def sample(self, s1=None, s2=None, latent_vector=None, condition1=None,
@@ -639,10 +667,7 @@ class ggm(torch.nn.Module):
         # -> (1, dim_of_graph_vector + dim_of_node_vector + N_conditions)
 
         # FC layer
-        retval = F.relu(self.add_node1(retval))
-        retval = F.relu(self.add_node2(retval))
-        retval = self.add_node3(retval)
-        retval = F.softmax(retval, -1)
+        retval = F.softmax(self.add_node_fc(retval), -1)
         return retval
 
     def add_edge(self, g, h, latent_vector):
