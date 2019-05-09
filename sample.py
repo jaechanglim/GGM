@@ -59,14 +59,8 @@ def sample(shared_model, wholes, scaffolds, condition1, condition2, pid, retval_
         retval = model.sample(s1, s2, latent_vector=None, condition1=condition1, condition2=condition2, stochastic=args.stochastic)
         #retval = shared_model(s)
         if retval is None: continue
-        g_gen, h_gen  = retval
-        
-        try:
-            new_smiles = utils.graph_to_smiles(g_gen, h_gen)
-        except:
-            new_smiles = None
         # Save the given whole SMILES and the new SMILES.
-        retval_list[pid].append((s1, new_smiles))
+        retval_list[pid].append((s1, retval))
     end1 = time.time()
     #print ('accumulate time', pid, end1-st1)
 
@@ -165,6 +159,6 @@ stochastic        : {args.stochastic}
     print ('after remove duplicate', len(unique))
 
     with open(args.output_filename, 'w') as output:
-        output.write(scaffolds[0]+'\toriginal\tegfr\n')
+        output.write(scaffolds[0]+'\toriginal\tscaffold\n')
         for idx, smiles in enumerate(unique):
             output.write(smiles + '\t' + 'gen_' + str(idx) + '\n')

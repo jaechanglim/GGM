@@ -265,10 +265,12 @@ class ggm(torch.nn.Module):
 
         #select isomer
         isomers = utils.enumerate_molecule(s1)  # ??
-        selected_isomer, target = self.select_isomer(s1, latent_vector)
+        selected_isomer, target, _ = self.select_isomer(s1, s2, latent_vector)
         
         #isomer loss
-        total_loss4 = (selected_isomer-target).pow(2).sum()
+        criterion = nn.BCELoss()
+        total_loss4 = criterion(selected_isomer, target)
+        #total_loss4 = (selected_isomer-target).pow(2).sum()
         return scaffold_g, scaffold_h, total_loss1, total_loss2, total_loss4
 
     def sample(self, s1=None, s2=None, latent_vector=None, condition1=None, condition2=None, stochastic=False):
@@ -388,7 +390,16 @@ class ggm(torch.nn.Module):
                 scaffold_g_save[selected_node].append((new_edge, idx))
                 scaffold_g[selected_node].append(( self.init_edge_state(scaffold_h, new_edge), idx))
 
-        return scaffold_g_save, scaffold_h_save
+        try:
+            new_smiles = utils.graph_to_smiles(scaffold_g_save, scaffold_h_save)
+            new_smiles = Chem.MolToSmiles(Chem.MolFromSmiles(new_smiles), isomericSmiles=False)
+        except:
+            return None
+        selected_isomer, target, isomers = self.select_isomer(new_smiles, s2, latent_vector)
+        selected_isomer = np.argmax(utils.probability_to_one_hot(selected_isomer, stochastic).data.cpu().numpy())
+
+            
+        return isomers[selected_isomer]
 
 
         """ 
@@ -433,6 +444,7 @@ class ggm(torch.nn.Module):
             g_gen, h_gen = self.sample(None, s2, latent_vector) 
             try:
                 new_s = utils.graph_to_smiles(g_gen, h_gen)
+                new_s = Chem.MolToSmiles(Chem.MolFromSmiles(new_s), isomericSmiles=False)
             except:
                 new_s = None
             if new_s is None or new_s.find('.')!=-1:
@@ -581,7 +593,7 @@ class ggm(torch.nn.Module):
         #h = h.view(-1)
         return retval
     
-    def select_isomer(self, mother, latent_vector):
+    def select_isomer(self, mother, scaffold, latent_vector):
         """\
         Return an isomer-selection vector and the answer one-hot.
 
@@ -592,7 +604,13 @@ class ggm(torch.nn.Module):
             where `isomers` are the isomers of `mother`.
         """
         #sample possible isomer
-        isomers = utils.enumerate_molecule(mother)  # list of isomer SMILESs
+        m_mother = Chem.MolFromSmiles(mother)
+        isomer_candidates = utils.enumerate_molecule(mother)  # list of isomer SMILESs
+        isomers = []
+        for s in isomer_candidates:
+            m = Chem.MolFromSmiles(s)
+            if m.HasSubstructMatch(Chem.MolFromSmiles(scaffold),useChirality=True):
+                isomers.append(s)
         graph_vectors = []
 
         #make graph for each isomer
@@ -614,19 +632,19 @@ class ggm(torch.nn.Module):
         retval = F.relu(self.select_isomer2(retval))
         retval = self.select_isomer3(retval)
         retval = retval.view(-1)  # (len(isomers),)
-        retval = F.softmax(retval, 0)
+        retval = torch.sigmoid(retval)
         target = []
-        m = Chem.MolFromSmiles(mother)
+
 
         #check which isomer is same as mother
         for s in isomers:
-            if m.HasSubstructMatch(Chem.MolFromSmiles(s),useChirality=True):
+            if m_mother.HasSubstructMatch(Chem.MolFromSmiles(s),useChirality=True):
                 target.append(1)
             else:
                 target.append(0)
         target = utils.create_var(torch.Tensor(target))  # (len(isomers),)
         
-        return retval, target
+        return retval, target, isomers
 
     def predict_property(self, latent_vector):
         h = self.predict_property1(latent_vector)
