@@ -6,6 +6,7 @@ import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
 from torch.utils.data.sampler import Sampler
 
+
 class GGMSampler(Sampler):
     """
     ratios: [prop1:[None, Low, High], prop2: [None, Low, High] ... ]

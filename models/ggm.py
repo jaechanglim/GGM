@@ -1,5 +1,5 @@
-import copy
 import random
+import numpy as np
 
 from rdkit import Chem
 import torch
@@ -7,6 +7,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 import GGM.utils.util as util
+
 
 class GGM(nn.Module):
 
@@ -263,6 +264,7 @@ class GGM(nn.Module):
         self.embed_graph(g_predict, h_predict)
         self.embed_graph(scaffold_g_predict, scaffold_h_predict)
 
+        # (N_conditions, )
         condition_truth = \
             util.create_var(torch.FloatTensor(condition))
         condition_whole = self.predict(g_predict, h_predict)
@@ -276,6 +278,7 @@ class GGM(nn.Module):
         criteria_predict = nn.MSELoss()
         total_loss_predict = criteria_predict(condition_masked, condition_truth)
 
+        # predicting loss of each property
         loss_property = []
         for i in range(self.N_properties):
             condition_prop = \
@@ -286,6 +289,7 @@ class GGM(nn.Module):
             loss = criteria_predict(condition_prop, condition_prop_truth)
             loss_property.append(loss.item())
 
+        # (N_condition,) -> (1, N_conditions)
         condition = condition.view(1, -1)
         self.encode(g, h, condition)
 
@@ -418,6 +422,150 @@ class GGM(nn.Module):
                total_loss_isomer, \
                total_loss_predict, \
                loss_property
+
+    def sample(self, s1=None, s2=None, latent_vector=None, condition=None, stochastic=False):
+
+        """\
+        Parameters
+        ----------
+        s1: whole SMILES str
+            If given, its graph becomes a latent vector to be decoded.
+        s2: scaffold SMILES str
+            Must be given other than None.
+        latent_vector: None | torch.autograd.Variable
+            A latent vector to be decoded.
+            Not used if `s1` is given.
+            If both `latent_vector` and `s1` are None,
+            a latent vector is sampled from the standard normal.
+        condition1: list[float] | None
+            [ target_value1, target_value2, ... ]
+            If None, target values are sampled from uniform [0, 1].
+            Can be an empty list for unconditional sampling.
+        condition2: list[float] | None
+            [ scaffold_value1, scaffold_value2, ... ]
+            If None, scaffold values are sampled from uniform [0, 1].
+            Can be an empty list for unconditional sampling.
+        stochastic: bool
+            See `utils.probability_to_one_hot`.
+
+        Returns
+        -------
+        scaffold_g_save: OrderedDict[int, list[tuple[torch.autograd.Variable, int]]]
+            A new dict of edge one-hot vectors and partner-node indices
+            generated from the given scaffold `s2`.
+        scaffold_h_save: OrderedDict[int, torch.autograd.Variable]
+            A new dict of node one-hot vectors generated from the given scaffold `s2`.
+        """
+
+        # Specification of graph variables defined here
+        # ---------------------------------------------
+        # g, g_save, scaffold_g, scaffold_g_save: edge dict objects
+        #    -> OrderedDict[int, list[tuple[torch.autograd.Variable, int]]]
+        #    -> { node_idx: [ (edge_vector, partner_node_idx), ... ], ... }
+        #
+        # h, h_save, scaffold_h, scaffold_h_save: node dict objects
+        #    -> OrderedDict[int, torch.autograd.Variable]
+        #    -> { node_idx: node_vector, ... }
+        #
+        # g_save, h_save:
+        #     Backup of the whole-graph one-hots w/o extra features.
+        #     These are not changed further.
+        # g, h:
+        #     become a latent vector for VAE.
+        # scaffold_g_save, scaffold_h_save:
+        #     The scaffold one-hots w/o extra features,
+        #     to which new one-hots will be added
+        #     to check later if the reconstruction is successful.
+        # scaffold_g, scaffold_h:
+        #     Scaffold dicts of latent edge/node vectors
+        #     to which new initialized state vectors will be added.
+
+        max_add_nodes = 100
+        max_add_edges = 5
+
+        if s2 in None:
+            print('when you sample, you must give scaffold')
+            return None
+
+        # Embed the scaffold edge/node vectors.
+        # If `s1` is given, convert its graph to a latent vector.
+        if s1 is not None:
+            g_save, h_save, scaffold_g_save, scaffold_h_save = util.make_graphs(s1, s2)
+            if g_save is None and h_save is None:
+                return None
+            g, h, scaffold_g, scaffold_h = util.make_graphs(s1, s2, extra_atom_feature= True, extra_bond_feature= True)
+
+            self.embed_graph(g, h)
+            self.embed_graph(scaffold_g, scaffold_h)
+
+            self.encode(g, h)
+            encoded_vector = self.cal_encoded_vector(h)
+            latent_vector, mu, logvar_FC = self.reparameterize(encoded_vector)
+            # `mu` and `logvar` are not used further.
+
+        # If `s1` is None, sample a latent vector from the standard normal.
+        elif s1 is None:
+            scaffold_g_save, scaffold_h_save = util.make_graph(s2)
+            if scaffold_g_save is None and scaffold_h_save is None:
+                return None
+            scaffold_g, scaffold_h = util.make_graph(s2, extra_atom_feature= True, extra_bond_feature= True)
+
+            self.embed_graph((scaffold_g, scaffold_h))
+            if latent_vector is None:
+                latent_vector = util.create_var(torch.randn(1, self.dim_of_node_vector))
+
+        # Sample condition values if not given.
+        if condition is None:
+            condition = np.random.rand(self.N_conditions)
+
+        # A condition torch.FloatTensor of shape (1, N_conditions):
+        condition = util.create_var(torch.Tensor(condition))
+        if condition.shape:
+            condition = condition.unsqueeze(0)
+        latent_vector = torch.cat([latent_vector, condition], -1)
+        # -> (1, dim_of_node_vector + N_conditions)
+        self.init_scaffold_state(scaffold_g, scaffold_h, condition)
+
+        for _ in range(max_add_nodes):
+            new_node = self.add_node(scaffold_g, scaffold_h, latent_vector)
+            new_node = util.probability_to_one_hot(new_node, stochastic)
+
+            # Recall our definition of the termination vector:
+            if np.argmax(new_node.data.cpu().numpy().ravel()) == self.N_bond_features - 1:
+                break
+
+            idx = len(scaffold_h)
+            scaffold_h_save[idx] = new_node
+            scaffold_h[idx] = self.init_node_state_FC(scaffold_h, new_node)
+
+            for _ in range(max_add_edges):
+                new_edge = self.add_edge(scaffold_g, scaffold_h, latent_vector)  # (1, N_bond_features)
+                new_edge = util.probability_to_one_hot(new_edge, stochastic)
+
+                # Recall our definition of the termination vector:
+                if np.argmax(new_edge.data.cpu().numpy().ravel()) == self.N_bond_features - 1:
+                    break
+
+                selected_node = self.select_node(scaffold_g, scaffold_h, latent_vector).view(1, -1)
+                selected_node = self.select_node(scaffold_g,scaffold_h,latent_vector).view(1, -1)
+                # -> (1, len(scaffold_h)-1)
+                # Index of the selected node (int)
+                selected_node = list(scaffold_h.keys())[
+                    np.argmax(util.probability_to_one_hot(selected_node, stochastic).data.cpu().numpy().ravel())]
+                if idx not in scaffold_g_save:
+                    scaffold_g_save[idx] = []
+                    scaffold_g[idx] = []
+                scaffold_g_save[idx].append((new_edge, selected_node))
+                scaffold_g[idx].append((self.init_edge_state(scaffold_h, new_edge), selected_node))
+
+                # Add the same edge in the opposite direction.
+                if selected_node not in scaffold_g_save:
+                    scaffold_g_save[selected_node] = []
+                    scaffold_g[selected_node] = []
+                scaffold_g_save[selected_node].append((new_edge, idx))
+                scaffold_g[selected_node].append((self.init_edge_state(scaffold_h, new_edge), idx))
+
+        return scaffold_g_save, scaffold_h_save
 
     def embed_graph(self, g, h):
         """\

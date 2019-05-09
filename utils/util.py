@@ -76,6 +76,31 @@ def one_hot(tensor, depth):
     ones = torch.sparse.torch.eye(depth)
     return ones.index_select(0, tensor.long())
 
+def probability_to_one_hot(tensor, stochastic = False):
+    """\
+    Convert a vector to one-hot of the same size.
+
+    If not stochastic, the one-hot index is argmax(tensor).
+    If stochastic, an index is randomly chosen
+    according to a probability proportional to each element.
+
+    Parameters
+    ----------
+    tensor: torch.autograd.Variable
+    stochastic: bool
+    """
+    if stochastic:
+        # Index-selection probability proportional to each element
+        prob = tensor.data.cpu().numpy().ravel().astype(np.float32)
+        prob = prob/np.sum(prob)
+        norm = np.sum(prob)
+        prob = [prob[i]/norm for i in range(len(prob))]
+        idx = int(np.random.choice(len(prob), 1, prob))
+    else:
+        idx = int(np.argmax(tensor.data.cpu().numpy()))
+    return create_var(one_hot(torch.FloatTensor([idx]), list(tensor.size())[-1] ))
+
+
 def collect_node_state(h, except_last=False):
     """Return a matrix made by concatenating the node vectors.
     Return shape -> (len(h), node_vector_length)    # if not except_last
