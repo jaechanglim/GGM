@@ -515,8 +515,11 @@ class GGM(nn.Module):
                 latent_vector = util.create_var(torch.randn(1, self.dim_of_node_vector))
 
         # Sample condition values if not given.
-        if condition is None:
-            condition = np.random.rand(self.N_conditions)
+        if condition[:self.N_properties] is None or condition[self.N_properties:] is None:
+            assert not self.N_properties
+            whole_condition = np.random.rand(self.N_properties)
+            scaffold_condition = np.random.rand(self.N_properties)
+            condition = whole_condition + scaffold_condition
 
         # A condition torch.FloatTensor of shape (1, N_conditions):
         condition = util.create_var(torch.Tensor(condition))

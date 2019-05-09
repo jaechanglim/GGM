@@ -1,18 +1,9 @@
 import argparse
-from collections import OrderedDict
 import os
 import time
-
-import numpy as np
 from rdkit import Chem
 import torch
-from torch.autograd import Variable
 import torch.multiprocessing as mp
-from torch.multiprocessing import Pool
-import torch.nn as nn
-import torch.optim as optim
-
-from GGM.utils.shared_optim import SharedRMSprop, SharedAdam
 import GGM.utils.util as util
 from GGM.models.ggm import GGM
 
@@ -58,7 +49,7 @@ def sample(shared_model, wholes, scaffolds, condition, pid, retval_list, args):
 
     for idx, (s1, s2) in enumerate(zip(wholes, scaffolds)):
         model.load_state_dict(shared_model.state_dict())
-        retval = model.sample(s1, s2, latent_vector=None, condition1=condition1, condition2=condition2,
+        retval = model.sample(s1, s2, latent_vector=None, condition = condition,
                               stochastic=args.stochastic)
         # retval = shared_model(s)
         if retval is None: continue
@@ -77,40 +68,70 @@ def sample(shared_model, wholes, scaffolds, condition, pid, retval_list, args):
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('--ncpus', help='number of cpus', type=int, default=1)
-    parser.add_argument('--item_per_cycle', help='number of generations per CPU', type=int, default=128)
-    parser.add_argument('--dim_of_node_vector', help='dimension of node_vector', type=int, default=128)
-    parser.add_argument('--dim_of_edge_vector', help='dimension of edge vector', type=int, default=128)
-    parser.add_argument('--dim_of_FC', help='dimension of FC', type=int, default=128)
-    parser.add_argument('--save_fpath', help='file path of saved model', type=str)
-    parser.add_argument('--scaffold', help='smiles of scaffold', type=str)
-    parser.add_argument('--target_properties', help='values of target properties', nargs='+', default=[], type=float)
-    parser.add_argument('--scaffold_properties', help='values of scaffold properties', nargs='+', default=[],
+    parser.add_argument('--ncpus',
+                        help='number of cpus',
+                        type=int, default=1)
+    parser.add_argument('--item_per_cycle',
+                        help='number of generations per CPU',
+                        type=int,
+                        default=128)
+    parser.add_argument('--dim_of_node_vector',
+                        help='dimension of node_vector',
+                        type=int,
+                        default=128)
+    parser.add_argument('--dim_of_edge_vector',
+                        help='dimension of edge vector',
+                        type=int,
+                        default=128)
+    parser.add_argument('--dim_of_FC',
+                        help='dimension of FC',
+                        type=int,
+                        default=128)
+    parser.add_argument('--save_fpath',
+                        help='file path of saved model',
+                        type=str)
+    parser.add_argument('--scaffold',
+                        help='smiles of scaffold',
+                        type=str)
+    parser.add_argument('--target_scaffold_properties',
+                        help='values of target properties and scaffold properties',
+                        nargs='+',
+                        default=[],
                         type=float)
-    parser.add_argument('--output_filename', help='output file name', type=str)
-    parser.add_argument('--minimum_values', help='minimum values of properties. It will be used for normalization',
-                        nargs='+', default=[], type=float)
-    parser.add_argument('--maximum_values', help='maximum values of properties. It will be used for normalization',
-                        nargs='+', default=[], type=float)
-    parser.add_argument('--stochastic', help='stocahstically add node and edge', action='store_true')
+    #parser.add_argument('--target_properties', help='values of target properties', nargs='+', default=[], type=float)
+    #parser.add_argument('--scaffold_properties', help='values of scaffold properties', nargs='+', default=[], type=float)
+    parser.add_argument('--output_filename',
+                        help='output file name',
+                        type=str)
+    parser.add_argument('--minimum_values',
+                        help='minimum values of properties. It will be used for normalization',
+                        nargs='+',
+                        default=[],
+                        type=float)
+    parser.add_argument('--maximum_values',
+                        help='maximum values of properties. It will be used for normalization',
+                        nargs='+',
+                        default=[],
+                        type=float)
+    parser.add_argument('--stochastic',
+                        help='stocahstically add node and edge',
+                        action='store_true')
     args = parser.parse_args()
 
     # hyperparameters
     save_fpath = os.path.realpath(os.path.expanduser(args.save_fpath))
     output_filename = os.path.realpath(os.path.expanduser(args.output_filename))
-
-    # Normalize the property values to be in [0, 1].
-    target_properties = [normalize(*values) for values in
-                         zip(args.target_properties, args.maximum_values, args.minimum_values)]
-    scaffold_properties = [normalize(*values) for values in
-                           zip(args.scaffold_properties, args.maximum_values, args.minimum_values)]
+    
+    target_properties = [normalize(*values) for values in zip(args.target_properties, args.maximum_values, args.minimum_values)]
+    scaffold_properties = [normalize(*values) for values in zip(args.scaffold_properties, args.maximum_values, args.minimum_values)]
+    target_scaffold_properties = target_properties + scaffold_properties
 
     # lines for multiprocessing
     mp.set_start_method('spawn')
     torch.manual_seed(1)
 
     # model
-    args.N_conditions = len(target_properties) + len(scaffold_properties)
+    args.N_conditions = len(target_scaffold_properties)
     shared_model = GGM(args)
     shared_model.share_memory()
 
@@ -138,8 +159,9 @@ stochastic        : {args.stochastic}
     # A whole SMILES can be given and become a latent vector for decoding,
     # but here it is given as None so that a latent is randomly sampled.
     wholes = [None for i in range(args.item_per_cycle)]
-    condition1 = target_properties.copy()
-    condition2 = scaffold_properties.copy()
+    target_condition = target_properties.copy()
+    scaffold_condition = scaffold_properties.copy()
+    target_scaffold_condition = target_condition + scaffold_condition
 
     # A list of multiprocessing.managers.ListProxy to collect SMILES
     retval_list = [mp.Manager().list() for i in range(args.ncpus)]
@@ -148,7 +170,7 @@ stochastic        : {args.stochastic}
 
     for pid in range(args.ncpus):
         p = mp.Process(target=sample,
-                       args=(shared_model, wholes, scaffolds, condition1, condition2, pid, retval_list, args))
+                       args=(shared_model, wholes, scaffolds, target_scaffold_condition, pid, retval_list, args))
         p.start()
         processes.append(p)
         time.sleep(0.1)
