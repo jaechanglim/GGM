@@ -143,22 +143,8 @@ stochastic        : {args.stochastic}
     # retval_list shape -> (ncpus, item_per_cycle, 2)
     generations = [j[1] for k in retval_list for j in k]  # list of new SMILESs
 
-    # Check valid generations.
-    # A valid generation should
-    #    i) consist of only one molecule and
-    #   ii) retain the scaffold moiety (w/o broken aromaticity).
-    scaffoldMol = Chem.MolFromSmiles(args.scaffold)
-    valid = [smiles for smiles in generations
-             if smiles is not None and
-             '.' not in smiles and
-             Chem.MolFromSmiles(smiles).HasSubstructMatch(scaffoldMol)
-    ]
-    print ('before remove duplicate:', len(valid))
-    # Remove duplicates.
-    unique = set(valid)
-    print ('after remove duplicate', len(unique))
-
+    # Write the generated SMILES strings.
     with open(args.output_filename, 'w') as output:
         output.write(scaffolds[0]+'\toriginal\tscaffold\n')
-        for idx, smiles in enumerate(unique):
+        for idx, smiles in enumerate(generations):
             output.write(smiles + '\t' + 'gen_' + str(idx) + '\n')
