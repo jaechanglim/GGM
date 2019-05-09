@@ -1,11 +1,18 @@
 import argparse
+from collections import OrderedDict
 import os
 import time
 
+import numpy as np
 import torch
+from torch.autograd import Variable
 import torch.multiprocessing as mp
+from torch.multiprocessing import Pool
+import torch.nn as nn
+import torch.optim as optim
 
 from ggm import ggm
+from shared_optim import SharedRMSprop, SharedAdam
 import utils
 
 
@@ -52,14 +59,8 @@ def sample(shared_model, wholes, scaffolds, condition1, condition2, pid, retval_
         retval = model.sample(s1, s2, latent_vector=None, condition1=condition1, condition2=condition2, stochastic=args.stochastic)
         #retval = shared_model(s)
         if retval is None: continue
-        g_gen, h_gen  = retval
-        
-        try:
-            new_smiles = utils.graph_to_smiles(g_gen, h_gen)
-        except:
-            new_smiles = None
         # Save the given whole SMILES and the new SMILES.
-        retval_list[pid].append((s1, new_smiles))
+        retval_list[pid].append((s1, retval))
     end1 = time.time()
     #print ('accumulate time', pid, end1-st1)
 
@@ -140,13 +141,10 @@ stochastic        : {args.stochastic}
     end = time.time()       
 
     # retval_list shape -> (ncpus, item_per_cycle, 2)
-    valid = [j[1] for k in retval_list for j in k]  # list of new SMILESs
-    valid = [v for v in valid if v is not None]
-    print ('before remove duplicate:', len(valid))
-    valid = list(set(valid))
-    print ('after remove duplicate', len(valid))
-    w = open(args.output_filename, 'w')
-    w.write(scaffolds[0]+'\toriginal\tegfr\n')
-    for idx in range(len(valid)):
-        w.write(valid[idx] + '\t' + 'gen_' + str(idx) + '\n')
-    w.close()                
+    generations = [j[1] for k in retval_list for j in k]  # list of new SMILESs
+
+    # Write the generated SMILES strings.
+    with open(args.output_filename, 'w') as output:
+        output.write(scaffolds[0]+'\toriginal\tscaffold\n')
+        for idx, smiles in enumerate(generations):
+            output.write(smiles + '\t' + 'gen_' + str(idx) + '\n')
