@@ -122,7 +122,8 @@ def atom_features(atom, include_extra=False):
     """
     retval = one_of_k_encoding_unk(atom.GetSymbol(), ATOM_SYMBOLS)
     if include_extra:
-        retval += [atom.GetDegree(), atom.GetFormalCharge()]
+        retval += [#atom.GetDegree(),
+                   atom.GetFormalCharge()]
     return retval
 
 
@@ -183,14 +184,16 @@ def make_graph(smiles, extra_atom_feature = False, extra_bond_feature = False):
         molecule = Chem.MolFromSmiles(smiles)
     else:
         molecule = smiles
+    Chem.Kekulize(molecule)
+
     chiral_list = Chem.FindMolChiralCenters(molecule)
     chiral_index = [c[0] for c in chiral_list]
     chiral_tag = [c[1] for c in chiral_list]
     for i in range(0, molecule.GetNumAtoms()):
-        atom_i = molecule.GetAtomWithIdx(i)  # rdkit.Chem.Atom
-        if atom_i.GetSymbol() not in ATOM_SYMBOLS:
+        atom = molecule.GetAtomWithIdx(i)  # rdkit.Chem.Atom
+        if atom.GetSymbol() not in ATOM_SYMBOLS:
             return None, None
-        atom_i = atom_features(atom_i, extra_atom_feature)  # One-hot vector
+        atom_i = atom_features(atom, extra_atom_feature)  # One-hot vector
         if extra_atom_feature:
             if i in chiral_index:
                 if chiral_tag[chiral_index.index(i)] == 'R':
@@ -199,18 +202,19 @@ def make_graph(smiles, extra_atom_feature = False, extra_bond_feature = False):
                     atom_i += [0, 0, 1]
             else:
                 atom_i += [1, 0, 0]
+            atom_i.append(atom.GetIsAromatic())
+
         h[i] = create_var(torch.FloatTensor(atom_i), False).view(1, -1)
         for j in range(0, molecule.GetNumAtoms()):
             e_ij = molecule.GetBondBetweenAtoms(i, j)  # rdkit.Chem.Bond
-            if e_ij is not None:
-                # ADDED edge feat; one-hot vector
-                e_ij = list(map(lambda x: 1 if x else 0,
-                                bond_features(e_ij, extra_bond_feature)))
+            if e_ij != None:
+                e_ij = list(map(lambda x: 1 if x == True else 0,
+                                bond_features(e_ij, extra_bond_feature)))  # ADDED edge feat; one-hot vector
                 e_ij = create_var(torch.FloatTensor(e_ij).view(1, -1), False)
-                # atom_j = molecule.GetAtomWithIdx(j) not used
+                atom_j = molecule.GetAtomWithIdx(j)
                 if i not in g:
                     g[i] = []
-                g[i].append( (e_ij, j) )
+                g[i].append((e_ij, j))
     return g, h
 
 
@@ -230,10 +234,28 @@ def make_graphs(s1, s2, extra_atom_feature = False, extra_bond_feature = False):
         make_graph(Chem.Mol(molecule2), extra_atom_feature, extra_bond_feature)
     if g1 is None or h1 is None or g2 is None or h2 is None:
         return None, None, None, None
-    try:
-        g1, h1 = index_rearrange(molecule1, molecule2, g1, h1)
-    except:
+
+    scaffold_index = molecule1.GetSubstructMatches(molecule2)
+    if len(scaffold_index) == 0:
         return None, None, None, None
+    scaffold_index = list(scaffold_index[0])
+
+    g2 = OrderedDict({})
+    h2 = OrderedDict({})
+
+    for i in h1:
+        if i in scaffold_index:
+            h2[i] = deepcopy(h1[i])
+
+    for i in g1:
+        if i not in scaffold_index:
+            continue
+        else:
+            g2[i] = []
+        for edge in g1[i]:
+            if edge[1] in scaffold_index:
+                g2[i].append(deepcopy(edge))
+
     return g1, h1, g2, h2
 
 
@@ -394,6 +416,118 @@ def initialize_model(model, load_save_file=False):
                 # nn.init.normal(param, 0.0, 0.15)
                 nn.init.xavier_normal(param)
     return model
+
+def BO_to_smiles(atomic_symbols, BO, fc_list=None) -> str:
+    """\
+    Obtain a SMILES str corresponding to the given atom and bond types.
+
+    During the routine, a temporary SDF file is written
+    and read by RDKit to get a SMILES.
+
+    Parameters
+    ----------
+    atomic_symbols: list[str]
+    BO: 2D-ndarray of float or int
+    fc_list: None | list[int]
+
+    Returns
+    -------
+    smiles: str | None
+        If a valid SMILES cannot be made, None is returned.
+    """
+    natoms = len(atomic_symbols)
+    nbonds = int(np.count_nonzero(BO)/2)
+    # Temporary file descriptor and path to write SDF
+    sdf_fd, sdf_path = tempfile.mkstemp(prefix='GGM_tmp', dir=os.getcwd(), text=True)
+    with open(sdf_fd, 'w') as w:
+        w.write('\n')
+        w.write('     GGM\n')
+        w.write('\n')
+        w.write(str(natoms).rjust(3,' ')+str(nbonds).rjust(3, ' ') + '  0  0  0  0  0  0  0  0999 V2000\n')
+        for s in atomic_symbols.values():
+            w.write('    0.0000    0.0000    0.0000 '+s+'   0  0  0  0  0  0  0  0  0  0  0  0\n')
+        for i in range (int(natoms)):
+            for j in range(0,i):
+                bond_order = BO[i,j]
+                if bond_order!=0:
+                    #if BO[i,j]==4:
+                    #    BO[i,j]=2
+                    w.write(str(i+1).rjust(3, ' ') + str(j+1).rjust(3, ' ') + str(int(bond_order)).rjust(3, ' ') + '0'.rjust(3, ' ') + '\n')
+        if fc_list is not None:
+            w.write('M  CHG  '+str(len(fc_list)))
+            for fc in fc_list:
+                w.write(str(fc[0]).rjust(4, ' ')+str(fc[1]).rjust(4, ' '))
+            w.write('\n')
+        w.write('M  END\n')
+        w.write('$$$$')
+    # Rewrite the SDF using `babel`.
+    #os.system(f'babel -isdf {sdf_path} -osdf {sdf_path} 2> {os.devnull}')
+    # Get a SMILES if valid.
+    try:
+        m = Chem.SDMolSupplier(sdf_path)[0]
+        s = Chem.MolToSmiles(m)
+        # Final validation.
+        s = Chem.MolToSmiles(Chem.MolFromSmiles(s))
+    finally:
+        #pass
+        os.unlink(sdf_path)
+    return s
+
+def graph_to_smiles(g, h) -> str:
+    """Prepare atom symbols, bond orders and formal charges
+    and call `self.BO_to_smiles` to return a SMILES str."""
+    # Determine atom symbols by argmax of each node vector.
+    atomic_symbols = OrderedDict({})
+    for i in h.keys():
+        atomic_symbols[i] = ATOM_SYMBOLS[np.argmax(h[i].data.cpu().numpy())]
+
+    idx_to_atom = {i:k for i,k in enumerate(h.keys())}
+    atom_to_idx = {k:i for i,k in enumerate(h.keys())}
+
+    # Determine bond orders by argmax of each edge vector.
+    BO = np.zeros((len(atomic_symbols), len(atomic_symbols)))
+    for i in h.keys():
+        for j in range(len(g[i])):
+            BO[atom_to_idx[i],atom_to_idx[g[i][j][1]]] = \
+                np.argmax(g[i][j][0].data.cpu().numpy())+1
+    if not np.allclose(BO, BO.T, atol=1e-8):
+        print ('BO is not symmetry')
+        exit(-1)
+    fc_list = []
+    for i in range(len(atomic_symbols)):
+        for j in g[idx_to_atom[i]]:
+            bond = [(atomic_symbols[j[1]], BO[i][atom_to_idx[j[1]]]) \
+                for j in g[idx_to_atom[i]]]
+        fc = cal_formal_charge(atomic_symbols[idx_to_atom[i]], bond)
+        if fc!=0:
+            fc_list.append([i+1, fc])
+    #print (fc_list)
+    if len(fc_list)==0:
+        fc_list = None
+    smiles = BO_to_smiles(atomic_symbols, BO, fc_list)
+    return smiles
+
+def cal_formal_charge(atomic_symbol, bonds) -> int:
+    """\
+    Compute the formal charge of `atomic_symbol`
+    based on its partner atoms and bond orders.
+
+    Parameters
+    ----------
+    atomic_symbol: str
+    bonds: list[tuple[str, int]]
+        [ (atom_symbol, bond_order), ... ]
+    """
+    if atomic_symbol=='N':
+        #if sorted(bonds, key=lambda x: (x[0], x[1])) == [('C', 1), ('O', 1), ('O', 2)]:
+        #    return 1
+        if sum(j for i, j in bonds)==4:
+            return 1
+    #if atomic_symbol=='O':
+    #    if sorted(bonds, key=lambda x: (x[0], x[1])) == [('N', 1)]:
+    #        return -1
+
+    return 0
 
 def copy_ordered_dict(original):
     copied = OrderedDict()

@@ -49,20 +49,12 @@ def sample(shared_model, wholes, scaffolds, condition, pid, retval_list, args):
 
     for idx, (s1, s2) in enumerate(zip(wholes, scaffolds)):
         model.load_state_dict(shared_model.state_dict())
-        retval = model.sample(s1, s2, latent_vector=None, condition = condition,
+        retval = model.sample(s1, s2, latent_vector=None, condition=condition,
                               stochastic=args.stochastic)
         # retval = shared_model(s)
         if retval is None: continue
-        g_gen, h_gen = retval
-
-        try:
-            new_smiles = util.graph_to_smiles(g_gen, h_gen)
-        except:
-            new_smiles = None
         # Save the given whole SMILES and the new SMILES.
-        retval_list[pid].append((s1, new_smiles))
-    end1 = time.time()
-    # print ('accumulate time', pid, end1-st1)
+        retval_list[pid].append((s1, retval))
 
 
 if __name__ == '__main__':
@@ -181,22 +173,8 @@ stochastic        : {args.stochastic}
     # retval_list shape -> (ncpus, item_per_cycle, 2)
     generations = [j[1] for k in retval_list for j in k]  # list of new SMILESs
 
-    # Check valid generations.
-    # A valid generation should
-    #    i) consist of only one molecule and
-    #   ii) retain the scaffold moiety (w/o broken aromaticity).
-    scaffoldMol = Chem.MolFromSmiles(args.scaffold)
-    valid = [smiles for smiles in generations
-             if smiles is not None and
-             '.' not in smiles and
-             Chem.MolFromSmiles(smiles).HasSubstructMatch(scaffoldMol)
-             ]
-    print('before remove duplicate:', len(valid))
-    # Remove duplicates.
-    unique = set(valid)
-    print('after remove duplicate', len(unique))
-
+    # Write the generated SMILES strings.
     with open(args.output_filename, 'w') as output:
-        output.write(scaffolds[0] + '\toriginal\tegfr\n')
-        for idx, smiles in enumerate(unique):
+        output.write(scaffolds[0] + '\toriginal\tscaffold\n')
+        for idx, smiles in enumerate(generations):
             output.write(smiles + '\t' + 'gen_' + str(idx) + '\n')
