@@ -34,6 +34,7 @@ class GGM(nn.Module):
         self.N_bond_features = util.N_bond_features
         self.N_extra_atom_features = util.N_extra_atom_features
         self.N_extra_bond_features = util.N_extra_bond_features
+        self.dropout = args.dropout
 
         self.dim_of_graph_vector = 2 * self.dim_of_node_vector
 
@@ -595,7 +596,8 @@ class GGM(nn.Module):
             self.mpnn(g, h, self.prop_predict_U[k], self.prop_predict_C[k])
         encoded_vector = self.cal_encoded_vector(h)
         condition = \
-            self.linear(encoded_vector, self.prop_predict_FC, act=nn.ReLU())
+            self.linear(encoded_vector, self.prop_predict_FC, act=nn.ReLU(),
+                        dropout=self.dropout)
         return condition
 
     def predict_properties(self, smiles):
@@ -840,9 +842,12 @@ class GGM(nn.Module):
             h[v] = hs[idx]
 
     @staticmethod
-    def linear(vec, FC, act=None):
+    def linear(vec, FC, act=None, dropout=0):
         for i, layer in enumerate(FC):
             vec = layer(vec)
+            if not (dropout == 0):
+                dropout_layer = nn.Dropout(p=dropout)
+                vec = dropout_layer(vec)
             if (act is not None) and (i != len(FC)-1):
                 vec = act(vec)
         return vec

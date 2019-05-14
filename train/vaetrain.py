@@ -117,6 +117,10 @@ if __name__ == '__main__':
                         help='beta1: lambda paramter for VAE training',
                         type=float,
                         default=5e-3)
+    parser.add_argument('--dropout',
+                        help='dropout: dropout rate of property predictor',
+                        type=float,
+                        default=0.0)
     parser.add_argument('--smiles_path',
                         help='SMILES-data path')
     parser.add_argument('--data_paths',
@@ -197,6 +201,7 @@ if __name__ == '__main__':
     dim_of_edge_vector: {args.dim_of_edge_vector}
     dim_of_FC         : {args.dim_of_FC}
     beta1             : {args.beta1}
+    dropout           : {args.dropout}
     SMILES data path  : {smiles_path}
     Data directories  : {data_paths}
     Save directory    : {save_dir}
