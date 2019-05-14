@@ -1,18 +1,11 @@
 import argparse
-from collections import OrderedDict
 import os
 import time
 
-import numpy as np
 import torch
-from torch.autograd import Variable
 import torch.multiprocessing as mp
-from torch.multiprocessing import Pool
-import torch.nn as nn
-import torch.optim as optim
 
-from ggm import ggm
-from shared_optim import SharedRMSprop, SharedAdam
+from GGM_old.ggm import ggm
 import utils
 
 

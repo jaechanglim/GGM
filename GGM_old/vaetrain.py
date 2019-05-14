@@ -8,8 +8,8 @@ import numpy as np
 import torch
 import torch.multiprocessing as mp
 
-from ggm import ggm
-from shared_optim import SharedAdam
+from GGM_old.ggm import ggm
+from GGM_old.shared_optim import SharedAdam
 import utils
 
 
