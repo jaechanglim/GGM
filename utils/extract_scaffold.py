@@ -44,11 +44,9 @@ def manage_data(path):
             _affinity = " ".join(affinity_row)
             with_scaffold.append(_scaffold)
             with_affinity.append(_affinity)
-    scaffold_file = open("../data/scaffold_CHEMBL", "x")
     for i in range(len(with_scaffold)):
         scaffold_file.write("%s\n" % with_scaffold[i])
     scaffold_file.close()
-    affinity_file = open("../data/affinity_CHEMBL", "x")
     for i in range(len(with_affinity)):
         affinity_file.write("%s\n" % with_affinity[i])
     affinity_file.close()

@@ -271,14 +271,14 @@ class GGM(nn.Module):
         condition_whole = self.predict(g_predict, h_predict)
         condition_scaffold = \
             self.predict(scaffold_g_predict, scaffold_h_predict)
-        condition_whole = torch.squeeze(condition_whole)
-        condition_scaffold = torch.squeeze(condition_scaffold)
+        condition_whole = condition_whole.view(-1)
+        condition_scaffold = condition_scaffold.view(-1)
         condition = torch.cat((condition_whole, condition_scaffold))
         condition_masked = torch.mul(condition, mask)
 
         criteria_predict = nn.MSELoss()
         total_loss_predict = criteria_predict(condition_masked, condition_truth)
-
+        """
         # predicting loss of each property
         loss_property = []
         for i in range(self.N_properties):
@@ -289,7 +289,7 @@ class GGM(nn.Module):
                              condition_truth[self.N_properties + i]], 0)
             loss = criteria_predict(condition_prop, condition_prop_truth)
             loss_property.append(loss.item())
-
+        """
         # (N_condition,) -> (1, N_conditions)
         condition = condition.view(1, -1)
         self.encode(g, h, condition)
@@ -325,8 +325,10 @@ class GGM(nn.Module):
                                                    scaffold_h_save[idx])
 
             # find the edges connected to the new node
+
             edge_list = [e for e in g_save[idx] if
-                         e[1] in list(scaffold_h.keys())]
+                        e[1] in list(scaffold_h.keys())]
+
             if shuffle: random.shuffle(edge_list)
 
             for edge in edge_list:
@@ -422,7 +424,7 @@ class GGM(nn.Module):
                total_loss_vae, \
                total_loss_isomer, \
                total_loss_predict, \
-               loss_property
+               []
 
     def sample(self, s1=None, s2=None, latent_vector=None, condition=None, stochastic=False):
 
@@ -851,11 +853,6 @@ class GGM(nn.Module):
             if (act is not None) and (i != len(FC)-1):
                 vec = act(vec)
         return vec
-
-
-
-
-
 
 
 
