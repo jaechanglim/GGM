@@ -247,8 +247,11 @@ if __name__ == '__main__':
                 #     [ value1, value2, ... ],  # condition values of whole 1
                 #     [ value1, value2, ... ],  # condition values of whole 2
                 #     ... ]
-                _, wholes, scaffolds, conditions, masks = next(data_iter)
-
+                try:
+                    _, wholes, scaffolds, conditions, masks = next(data_iter)
+                except StopIteration:
+                    data_iter = iter(data)
+                    _, wholes, scaffolds, conditions, masks = next(data_iter)
                 proc = \
                     mp.Process(target=train,
                                args=(shared_model,
@@ -273,11 +276,8 @@ if __name__ == '__main__':
             loss2 = np.mean(np.array([losses[2] for k in retval_list for losses in k]))
             loss3 = np.mean(np.array([losses[3] for k in retval_list for losses in k]))
             loss4 = np.mean(np.array([losses[4] for k in retval_list for losses in k]))
-            loss_property = np.mean(np.array([losses[5] for k in retval_list
-                                              for losses in k]), axis=0)
             print ('%s\t%s\t%s\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f' %(epoch, cycle,
                                                                 epoch*num_cycles+cycle, loss, loss1, loss2, loss3, loss4, end-st))
-            print(loss_property)
             if cycle%args.save_every == 0:
                 name = save_dir+'/save_'+str(epoch)+'_' + str(cycle)+'.pt'
                 torch.save(shared_model.state_dict(), name)

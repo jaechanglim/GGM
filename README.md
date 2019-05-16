@@ -67,7 +67,7 @@ python ./train/vaetrain.py \
 --ncpus 15 \
 --smiles_path data/ChEMBL/id_smiles.txt \
 --data_paths data/ChEMBL/data.txt \
---save_dir results/20190515T2023/ \
+--save_dir results/20190516T2344/ \
 --dropout 0.5
 
 OMP_NUM_THREADS=1 \
