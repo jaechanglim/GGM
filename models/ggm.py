@@ -847,7 +847,7 @@ class GGM(nn.Module):
     def linear(vec, FC, act=None, dropout=0):
         for i, layer in enumerate(FC):
             vec = layer(vec)
-            if not (dropout == 0):
+            if not (dropout == 0) and (i != len(FC)-1):
                 dropout_layer = nn.Dropout(p=dropout)
                 vec = dropout_layer(vec)
             if (act is not None) and (i != len(FC)-1):

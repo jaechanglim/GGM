@@ -63,12 +63,13 @@ For **sampling using an unconditioned  model**, omit `--target_properties`, `--s
 
 OMP_NUM_THREADS=1 \
 python ./train/vaetrain.py \
---num_epochs 10 \
---ncpus 15 \
---smiles_path data/ChEMBL/id_smiles.txt \
---data_paths data/ChEMBL/data.txt \
---save_dir results/20190516T2344/ \
---dropout 0.5
+--num_epochs 500 \
+--ncpus 30 \
+--smiles_path data/ChEMBL/id_smiles_train.txt \
+--data_paths data/ChEMBL/data_normalized_train.txt \
+--save_dir results/20190517T1603/ \
+--dropout 0.5 \
+--beta1 0.1
 
 OMP_NUM_THREADS=1 \
 python ./train/vaetrain.py \

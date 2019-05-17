@@ -1,19 +1,15 @@
-if __name__ == "__main__":
-    with open("./data_normalized.txt", "w") as newFile:
-        values = []
-        with open("./data.txt") as oldFile:
-            for line in oldFile:
-                data = line.split(" ");
-                value = float(data[1])
-                values.append(value)
-        maxValue = max(values)
-        minValue = min(values)
-        with open("./data.txt") as oldFile:
-            for line in oldFile:
-                data = line.split(" ")
-                value = float(data[1])
-                normalizedValue = (value - minValue) / (maxValue - minValue)
-                data[1] = str(normalizedValue)
-                newLine = " ".join(data)
-                newFile.write(newLine)
+import random
 
+if __name__== "__main__":
+    ids = []
+    with open("./id_smiles_train.txt") as idFile:
+        for line in idFile:
+            data = line.split(" ")
+            ids.append(data[0])
+
+    with open("./data_normalized_train.txt", "w") as newFile:
+        with open("./data_normalized.txt") as oldFile:
+            for line in oldFile:
+                data= line.split(" ")
+                if data[0] in ids:
+                    newFile.write(line)
