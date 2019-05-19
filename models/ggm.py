@@ -143,10 +143,19 @@ class GGM(nn.Module):
             nn.ModuleList([nn.Linear(self.dim_of_node_vector, self.dim_of_FC),
                            nn.Linear(self.dim_of_FC, self.N_properties)])
 
-        self.predict_property_FC = \
-            nn.ModuleList([nn.Linear(2 * self.dim_of_node_vector, 512),
-                           nn.Linear(512, 512),
-                           nn.Linear(512, 1)])
+        if self.dropout == 0.0:
+            self.predict_property_FC = \
+                nn.ModuleList([nn.Linear(2 * self.dim_of_node_vector, 512),
+                               nn.Linear(512, 512),
+                               nn.Linear(512, 1)])
+        else:
+            self.predict_property_FC = \
+                nn.ModuleList([
+                    nn.Sequential(nn.Linear(2 * self.dim_of_node_vector, 512),
+                                  nn.Dropout(p=self.dropout)),
+                    nn.Sequential(nn.Linear(512, 512),
+                                  nn.Dropout(p=self.dropout)),
+                    nn.Linear(512, 1)])
 
         self.cal_graph_vector_FC = \
             nn.Linear(self.dim_of_node_vector, self.dim_of_graph_vector)
@@ -598,14 +607,15 @@ class GGM(nn.Module):
             self.mpnn(g, h, self.prop_predict_U[k], self.prop_predict_C[k])
         encoded_vector = self.cal_encoded_vector(h)
         condition = \
-            self.linear(encoded_vector, self.prop_predict_FC, act=nn.ReLU(),
-                        dropout=self.dropout)
+            self.linear(encoded_vector, self.prop_predict_FC, act=nn.ReLU())
         return condition
 
     def predict_properties(self, smiles):
         mol = Chem.Mol(Chem.MolFromSmiles(smiles))
         g, h = util.make_graph(mol, extra_atom_feature=True,
                                extra_bond_feature=True)
+        if g is None or h is None:
+            return None
         self.embed_graph(g, h)
         properties = self.predict(g, h)
         return properties
@@ -844,12 +854,9 @@ class GGM(nn.Module):
             h[v] = hs[idx]
 
     @staticmethod
-    def linear(vec, FC, act=None, dropout=0):
+    def linear(vec, FC, act=None):
         for i, layer in enumerate(FC):
             vec = layer(vec)
-            if not (dropout == 0) and (i != len(FC)-1):
-                dropout_layer = nn.Dropout(p=dropout)
-                vec = dropout_layer(vec)
             if (act is not None) and (i != len(FC)-1):
                 vec = act(vec)
         return vec

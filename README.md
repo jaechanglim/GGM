@@ -63,11 +63,11 @@ For **sampling using an unconditioned  model**, omit `--target_properties`, `--s
 
 OMP_NUM_THREADS=1 \
 python ./train/vaetrain.py \
---num_epochs 500 \
+--num_epochs 200 \
 --ncpus 30 \
 --smiles_path data/ChEMBL/id_smiles_train.txt \
 --data_paths data/ChEMBL/data_normalized_train.txt \
---save_dir results/20190517T1603/ \
+--save_dir results/20190519T1500/ \
 --dropout 0.5 \
 --beta1 0.1
 
@@ -79,3 +79,18 @@ python ./train/vaetrain.py \
 --data_paths data_egfr/logp/data.txt \
 --save_dir results/20190515T2023/ \
 --dropout 0.5
+
+
+python ./train/predict.py \
+--smiles_path data/ChEMBL/id_smiles_test.txt \
+--data_paths data/ChEMBL/data_normalized_test.txt \
+--save_fpath results/20190518T2105/save_16_0.pt \
+--dropout 0.5
+
+python ./train/predict.py \
+--smiles_path data/ChEMBL/id_smiles_train.txt \
+--data_paths data/ChEMBL/data_normalized_train.txt \
+--save_fpath results/20190518T2105/save_16_0.pt \
+--dropout 0.5
+
+util.make_graphs("Nc1ncnc2c1c(cn2C3CCC(O)C3)c4ccc(Oc5ccccc5)cc4", "c1ccc(Oc2ccc(-c3cn(C4CCCC4)c4ncncc34)cc2)cc1", extra_atom_feature=True, extra_bond_feature=True)
