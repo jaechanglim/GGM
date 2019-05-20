@@ -84,13 +84,13 @@ python ./train/vaetrain.py \
 python ./train/predict.py \
 --smiles_path data/ChEMBL/id_smiles_test.txt \
 --data_paths data/ChEMBL/data_normalized_test.txt \
---save_fpath results/20190518T2105/save_16_0.pt \
+--save_fpath results/20190519T1500/save_199_0.pt \
 --dropout 0.5
 
 python ./train/predict.py \
 --smiles_path data/ChEMBL/id_smiles_train.txt \
 --data_paths data/ChEMBL/data_normalized_train.txt \
---save_fpath results/20190518T2105/save_16_0.pt \
+--save_fpath results/20190519T1500/save_16_0.pt \
 --dropout 0.5
 
 util.make_graphs("Nc1ncnc2c1c(cn2C3CCC(O)C3)c4ccc(Oc5ccccc5)cc4", "c1ccc(Oc2ccc(-c3cn(C4CCCC4)c4ncncc34)cc2)cc1", extra_atom_feature=True, extra_bond_feature=True)

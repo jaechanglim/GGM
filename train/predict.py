@@ -13,18 +13,19 @@ import GGM.utils.util as util
 
 
 def predict(model, data):
-    model.eval()
+    model.train()
     losses = []
-    with torch.no_grad():
-        for i, batch in enumerate(data):
-            whole = batch[1][0]
-            scaffold = batch[2][0]
-            conditions = batch[3]
-            whole_condition = model.predict_properties(whole)
-            if whole_condition is not None:
-                criteria = nn.MSELoss()
-                loss = criteria(whole_condition, conditions)
-                losses.append(loss.item())
+    for i, batch in enumerate(data):
+        whole = batch[1][0]
+        scaffold = batch[2][0]
+        conditions = batch[3]
+        whole_condition = model.predict_properties(whole)
+        if whole_condition is not None:
+            if (i < 10):
+                print(whole, whole_condition, conditions)
+            criteria = nn.MSELoss()
+            loss = criteria(whole_condition, conditions)
+            losses.append(loss.item())
     print(sum(losses)/len(losses))
 
 
