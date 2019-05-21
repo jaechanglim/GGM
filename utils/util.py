@@ -350,26 +350,6 @@ def enumerate_molecule(s: str):
     return retval
 
 
-def initialize_model(model, load_save_file=False):
-    """\
-    Parameters
-    ----------
-    model: ggm.ggm
-    load_save_file: str
-        File path of the save model.
-    """
-    if load_save_file:
-        model.load_state_dict(torch.load(load_save_file))
-    else:
-        for param in model.parameters():
-            if param.dim() == 1:
-                continue
-                nn.init.constant(param, 0)
-            else:
-                # nn.init.normal(param, 0.0, 0.15)
-                nn.init.xavier_normal(param)
-    return model
-
 def copy_ordered_dict(original):
     copied = OrderedDict()
     print(original.keys())

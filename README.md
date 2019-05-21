@@ -66,10 +66,10 @@ python ./train/vaetrain.py \
 --num_epochs 200 \
 --ncpus 30 \
 --smiles_path data/ChEMBL/id_smiles_train.txt \
---data_paths data/ChEMBL/data_normalized_train.txt \
---save_dir results/20190519T1500/ \
---dropout 0.5 \
+--data_paths data/ChEMBL/data_train.txt \
+--save_dir results/20190521T1229/ \
 --beta1 0.1
+--dropout 0.5
 
 OMP_NUM_THREADS=1 \
 python ./train/vaetrain.py \
@@ -78,7 +78,6 @@ python ./train/vaetrain.py \
 --smiles_path data_egfr/id_smiles.txt \
 --data_paths data_egfr/logp/data.txt \
 --save_dir results/20190515T2023/ \
---dropout 0.5
 
 
 python ./train/predict.py \
