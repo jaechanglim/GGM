@@ -4,7 +4,7 @@ from operator import itemgetter
 import numpy as np
 from rdkit import Chem
 from rdkit.Chem.EnumerateStereoisomers \
-    import EnumerateStereoisomers, StereoEnumerationOptions
+import EnumerateStereoisomers, StereoEnumerationOptions
 import torch
 import torch.nn as nn
 
