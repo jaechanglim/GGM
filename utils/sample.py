@@ -85,13 +85,15 @@ if __name__ == '__main__':
     parser.add_argument('--scaffold',
                         help='smiles of scaffold',
                         type=str)
+    """
     parser.add_argument('--target_scaffold_properties',
                         help='values of target properties and scaffold properties',
                         nargs='+',
                         default=[],
                         type=float)
-    #parser.add_argument('--target_properties', help='values of target properties', nargs='+', default=[], type=float)
-    #parser.add_argument('--scaffold_properties', help='values of scaffold properties', nargs='+', default=[], type=float)
+    """
+    parser.add_argument('--target_properties', help='values of target properties', nargs='+', default=[], type=float)
+    parser.add_argument('--scaffold_properties', help='values of scaffold properties', nargs='+', default=[], type=float)
     parser.add_argument('--output_filename',
                         help='output file name',
                         type=str)

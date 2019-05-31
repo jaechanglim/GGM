@@ -228,7 +228,6 @@ if __name__ == '__main__':
     # Sample active and inactive keys by the required ratio.
     else:
         sampler = GGMSampler(dataset,
-                             num_samples=len(dataset),
                              ratios=args.active_ratio)
         data = DataLoader(dataset,
                           batch_size=args.item_per_cycle,

@@ -6,6 +6,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
+from sklearn.metrics import r2_score
 
 from GGM.models.ggm import GGM
 from GGM.utils.data import GGMDataset
@@ -13,20 +14,42 @@ import GGM.utils.util as util
 
 
 def predict(model, data):
-    model.train()
+    model.eval()
     losses = []
-    for i, batch in enumerate(data):
-        whole = batch[1][0]
-        scaffold = batch[2][0]
-        conditions = batch[3]
-        whole_condition = model.predict_properties(whole)
-        if whole_condition is not None:
-            if (i < 10):
-                print(whole, whole_condition, conditions)
-            criteria = nn.MSELoss()
-            loss = criteria(whole_condition, conditions)
-            losses.append(loss.item())
+    whole_pred = []
+    whole_true = []
+    diffs = []
+
+    with torch.no_grad():
+        for i, batch in enumerate(data):
+            whole = batch[1][0]
+            scaffold = batch[2][0]
+            conditions = batch[3][0]
+            whole_condition = model.predict_properties(whole)
+            if whole_condition is not None:
+                if (i < 10):
+                    print(whole, whole_condition[0][0], conditions[0])
+                criteria = nn.L1Loss()
+                whole_pred.append(whole_condition[0][0])
+                whole_true.append(conditions[0])
+                diff = (whole_condition[0][0] - conditions[0]) ** 2
+                diffs.append(diff)
+                loss = criteria(whole_condition[0][0], conditions[0])
+                losses.append(loss.item())
+                
+        np.asarray(whole_pred).astype(np.float64)
+        np.asarray(whole_true).astype(np.float64)
     print(sum(losses)/len(losses))
+    print(sum(diffs)/len(diffs))
+    print(r2_score(whole_pred, whole_true))
+
+def predict_scaffold(model):
+    model.eval()
+    with torch.no_grad():
+        condition = model.predict_properties("O=C1Nc2ncnc("
+                                           "Nc3ccccc3)c2/C1=C/c1ccc[nH]1")
+        print(condition)
+
 
 
 if __name__ == "__main__":
@@ -82,4 +105,5 @@ if __name__ == "__main__":
 
     data = DataLoader(dataset)
 
-    predict(model, data)
+    #predict(model, data)
+    predict_scaffold(model)
