@@ -35,7 +35,6 @@ class GGM(nn.Module):
         self.N_extra_atom_features = util.N_extra_atom_features
         self.N_extra_bond_features = util.N_extra_bond_features
         self.dropout = args.dropout
-
         self.dim_of_graph_vector = 2 * self.dim_of_node_vector
 
         self.enc_U = \
@@ -131,22 +130,35 @@ class GGM(nn.Module):
                            nn.Linear(self.dim_of_FC, 1)])
 
         self.prop_predict_U = \
-            nn.ModuleList([nn.Linear(2 * self.dim_of_node_vector
+            nn.ModuleList([nn.Sequential(nn.Linear(2 * self.dim_of_node_vector
                                      + self.dim_of_edge_vector,
-                                     self.dim_of_node_vector)
-                           for _ in range(2)])
+                                     self.dim_of_node_vector),
+                                         nn.Dropout(p=self.dropout)),
+                           nn.Linear(2 * self.dim_of_node_vector
+                                     + self.dim_of_edge_vector,
+                                     self.dim_of_node_vector)])
         self.prop_predict_C = \
             nn.ModuleList([nn.GRUCell(self.dim_of_node_vector,
                                       self.dim_of_node_vector)
                            for _ in range(2)])
+        """
         self.prop_predict_FC = \
             nn.ModuleList([nn.Linear(self.dim_of_node_vector, self.dim_of_FC),
                            nn.Linear(self.dim_of_FC, self.N_properties)])
-
-        self.predict_property_FC = \
-            nn.ModuleList([nn.Linear(2 * self.dim_of_node_vector, 512),
-                           nn.Linear(512, 512),
-                           nn.Linear(512, 1)])
+        """
+        if self.dropout == 0.0:
+            self.prop_predict_FC = \
+                nn.ModuleList([nn.Linear(self.dim_of_node_vector, self.dim_of_FC),
+                               nn.Linear(self.dim_of_FC, self.dim_of_FC),
+                               nn.Linear(self.dim_of_FC, self.N_properties)])
+        else:
+            self.prop_predict_FC = \
+                nn.ModuleList([
+                    nn.Sequential(nn.Linear(self.dim_of_node_vector, self.dim_of_FC),
+                                  nn.Dropout(p=self.dropout)),
+                    nn.Sequential(nn.Linear(self.dim_of_FC, self.dim_of_FC),
+                                  nn.Dropout(p=self.dropout)),
+                    nn.Linear(self.dim_of_FC, self.N_properties)])
 
         self.cal_graph_vector_FC = \
             nn.Linear(self.dim_of_node_vector, self.dim_of_graph_vector)
@@ -271,14 +283,14 @@ class GGM(nn.Module):
         condition_whole = self.predict(g_predict, h_predict)
         condition_scaffold = \
             self.predict(scaffold_g_predict, scaffold_h_predict)
-        condition_whole = torch.squeeze(condition_whole)
-        condition_scaffold = torch.squeeze(condition_scaffold)
+        condition_whole = condition_whole.view(-1)
+        condition_scaffold = condition_scaffold.view(-1)
         condition = torch.cat((condition_whole, condition_scaffold))
         condition_masked = torch.mul(condition, mask)
 
         criteria_predict = nn.MSELoss()
         total_loss_predict = criteria_predict(condition_masked, condition_truth)
-
+        """
         # predicting loss of each property
         loss_property = []
         for i in range(self.N_properties):
@@ -289,7 +301,7 @@ class GGM(nn.Module):
                              condition_truth[self.N_properties + i]], 0)
             loss = criteria_predict(condition_prop, condition_prop_truth)
             loss_property.append(loss.item())
-
+        """
         # (N_condition,) -> (1, N_conditions)
         condition = condition.view(1, -1)
         self.encode(g, h, condition)
@@ -325,8 +337,10 @@ class GGM(nn.Module):
                                                    scaffold_h_save[idx])
 
             # find the edges connected to the new node
+
             edge_list = [e for e in g_save[idx] if
-                         e[1] in list(scaffold_h.keys())]
+                        e[1] in list(scaffold_h.keys())]
+
             if shuffle: random.shuffle(edge_list)
 
             for edge in edge_list:
@@ -411,7 +425,8 @@ class GGM(nn.Module):
 
         # select isomer
         isomers = util.enumerate_molecule(s1)  # ??
-        selected_isomer, target = self.select_isomer(s1, latent_vector)
+        selected_isomer, target = self.select_isomer(mother=s1,
+                                                     latent_vector=latent_vector)
 
         # isomer loss
         total_loss_isomer = (selected_isomer - target).pow(2).sum()
@@ -422,7 +437,7 @@ class GGM(nn.Module):
                total_loss_vae, \
                total_loss_isomer, \
                total_loss_predict, \
-               loss_property
+               []
 
     def sample(self, s1=None, s2=None, latent_vector=None, condition=None, stochastic=False):
 
@@ -484,7 +499,7 @@ class GGM(nn.Module):
         max_add_nodes = 100
         max_add_edges = 5
 
-        if s2 in None:
+        if s2 is None:
             print('when you sample, you must give scaffold')
             return None
 
@@ -511,7 +526,7 @@ class GGM(nn.Module):
                 return None
             scaffold_g, scaffold_h = util.make_graph(s2, extra_atom_feature= True, extra_bond_feature= True)
 
-            self.embed_graph((scaffold_g, scaffold_h))
+            self.embed_graph(scaffold_g, scaffold_h)
             if latent_vector is None:
                 latent_vector = util.create_var(torch.randn(1, self.dim_of_node_vector))
 
@@ -540,7 +555,7 @@ class GGM(nn.Module):
 
             idx = len(scaffold_h)
             scaffold_h_save[idx] = new_node
-            scaffold_h[idx] = self.init_node_state_FC(scaffold_h, new_node)
+            scaffold_h[idx] = self.init_node_state(scaffold_h, new_node)
 
             for _ in range(max_add_edges):
                 new_edge = self.add_edge(scaffold_g, scaffold_h, latent_vector)  # (1, N_bond_features)
@@ -568,8 +583,20 @@ class GGM(nn.Module):
                     scaffold_g[selected_node] = []
                 scaffold_g_save[selected_node].append((new_edge, idx))
                 scaffold_g[selected_node].append((self.init_edge_state(scaffold_h, new_edge), idx))
+        try:
+            new_smiles = util.graph_to_smiles(scaffold_g_save, scaffold_h_save)
+            new_smiles = Chem.MolToSmiles(Chem.MolFromSmiles(new_smiles),
+                                          isomericSmiles=False)
+        except:
+            print("Error while generating smiles")
+            return None
 
-        return scaffold_g_save, scaffold_h_save
+        selected_isomer, target, isomers = self.select_isomer_scaffold(
+            new_smiles,s2,latent_vector)
+        selected_isomer = np.argmax(util.probability_to_one_hot(
+            selected_isomer, stochastic).data.cpu().numpy())
+
+        return isomers[selected_isomer]
 
     def embed_graph(self, g, h):
         """\
@@ -596,14 +623,16 @@ class GGM(nn.Module):
             self.mpnn(g, h, self.prop_predict_U[k], self.prop_predict_C[k])
         encoded_vector = self.cal_encoded_vector(h)
         condition = \
-            self.linear(encoded_vector, self.prop_predict_FC, act=nn.ReLU(),
-                        dropout=self.dropout)
+            self.linear(encoded_vector, self.prop_predict_FC, act=nn.ReLU())
+        # print(condition)
         return condition
 
     def predict_properties(self, smiles):
         mol = Chem.Mol(Chem.MolFromSmiles(smiles))
         g, h = util.make_graph(mol, extra_atom_feature=True,
                                extra_bond_feature=True)
+        if g is None or h is None:
+            return None
         self.embed_graph(g, h)
         properties = self.predict(g, h)
         return properties
@@ -700,7 +729,6 @@ class GGM(nn.Module):
     def select_isomer(self, mother, latent_vector):
         """\
         Return an isomer-selection vector and the answer one-hot.
-
         Returns
         -------
         retval: isomer-selection latent vector of shape (len(isomers),)
@@ -716,8 +744,8 @@ class GGM(nn.Module):
         for s in isomers:
             g, h = \
                 util.make_graph(s,
-                                      extra_atom_feature=True,
-                                      extra_bond_feature=True)
+                                extra_atom_feature=True,
+                                extra_bond_feature=True)
             self.embed_graph(g, h)
             for k in range(len(self.prop_select_isomer_U)):
                 self.mpnn(g, h, self.prop_select_isomer_U[k],
@@ -746,6 +774,61 @@ class GGM(nn.Module):
         target = util.create_var(torch.Tensor(target))  # (len(isomers),)
 
         return retval, target
+
+    def select_isomer_scaffold(self, mother, scaffold, latent_vector):
+        """\
+        Return an isomer-selection vector and the answer one-hot.
+
+        Returns
+        -------
+        retval: isomer-selection latent vector of shape (len(isomers),)
+        target: answer one-hot of shape (len(isomers),)
+            where `isomers` are the isomers of `mother`.
+        """
+        # sample possible isomer
+        m_mother = Chem.MolFromSmiles(mother)
+        isomer_candidates = util.enumerate_molecule(
+            mother)  # list of isomer SMILESs
+        isomers = []
+        for s in isomer_candidates:
+            m = Chem.MolFromSmiles(s)
+            if m.HasSubstructMatch(Chem.MolFromSmiles(scaffold),
+                                   useChirality=True):
+                isomers.append(s)
+        graph_vectors = []
+
+        # make graph for each isomer
+        for s in isomers:
+            g, h = util.make_graph(s, extra_atom_feature=True,
+                                    extra_bond_feature=True)
+            self.embed_graph(g, h)
+            for k in range(len(self.prop_select_isomer_U)):
+                self.mpnn(g, h, self.prop_select_isomer_U[k],
+                          self.prop_select_isomer_C[k], latent_vector)
+            graph_vectors.append(util.average_node_state(h))
+        graph_vectors = torch.cat(graph_vectors, 0)
+        # -> (len(isomers), dim_of_node_vector)
+        latent_vectors = latent_vector.repeat(len(isomers), 1)
+        # -> (len(isomers), dim_of_node_vector + N_conditions)
+        retval = torch.cat([graph_vectors, latent_vectors], -1)
+        # -> (len(isomers), 2*dim_of_node_vector + N_conditions)
+
+        # FC layer
+        retval = self.linear(retval, self.prop_select_isomer_FC, nn.ReLU())
+        retval = retval.view(-1)  # (len(isomers),)
+        retval = F.softmax(retval, 0)
+        target = []
+
+        # check which isomer is same as mother
+        for s in isomers:
+            if m_mother.HasSubstructMatch(Chem.MolFromSmiles(s),
+                                          useChirality=True):
+                target.append(1)
+            else:
+                target.append(0)
+        target = util.create_var(torch.Tensor(target))  # (len(isomers),)
+
+        return retval, target, isomers
 
     def init_node_state(self, h, atom_feature):
         """Return an initialized node-state vector of shape (1, dim_of_node_vector).
@@ -842,20 +925,12 @@ class GGM(nn.Module):
             h[v] = hs[idx]
 
     @staticmethod
-    def linear(vec, FC, act=None, dropout=0):
+    def linear(vec, FC, act=None):
         for i, layer in enumerate(FC):
             vec = layer(vec)
-            if not (dropout == 0):
-                dropout_layer = nn.Dropout(p=dropout)
-                vec = dropout_layer(vec)
             if (act is not None) and (i != len(FC)-1):
                 vec = act(vec)
         return vec
-
-
-
-
-
 
 
 
