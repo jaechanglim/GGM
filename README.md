@@ -65,11 +65,12 @@ OMP_NUM_THREADS=1 \
 python ./train/vaetrain.py \
 --num_epochs 200 \
 --ncpus 30 \
---smiles_path data/ChEMBL/id_smiles_train.txt \
---data_paths data/ChEMBL/data_train.txt \
---save_dir results/20190522T0100/ \
---beta1 0.1
---dropout 0.7
+--smiles_path data/ChEMBL+STOCK1S/id_smiles_train.txt \
+--data_paths data/ChEMBL+STOCK1S/data_ChEMBL_train.txt \
+--save_dir results/20190530T2237/ \
+--beta1 0.1 \
+--active_ratio 0.5
+--dropout 0.5
 
 OMP_NUM_THREADS=1 \
 python ./train/vaetrain.py \
@@ -82,8 +83,8 @@ python ./train/vaetrain.py \
 
 python ./train/predict.py \
 --smiles_path data/ChEMBL/id_smiles_test.txt \
---data_paths data/ChEMBL/data_test.txt \
---save_fpath results/20190522T0100/save_199_0.pt \
+--data_paths data/ChEMBL/data_normalized_test.txt \
+--save_fpath results/20190522T0106/save_199_0.pt \
 --dropout 0.7
 
 python ./train/predict.py \
@@ -91,5 +92,14 @@ python ./train/predict.py \
 --data_paths data/ChEMBL/data_normalized_train.txt \
 --save_fpath results/20190519T1500/save_16_0.pt \
 --dropout 0.5
+
+python ./utils/sample.py \
+--save_fpath results/20190522T0106/save_199_0.pt \
+--scaffold "O=C1Nc2ncnc(Nc3ccccc3)c2/C1=C/c1ccc[nH]1" \
+--target_properties 6.0 \
+--scaffold_properties 5.9244 \
+--output_filename "sample.txt" \
+--minimum_values 0.0 \
+--maximum_values 10.0
 
 util.make_graphs("Nc1ncnc2c1c(cn2C3CCC(O)C3)c4ccc(Oc5ccccc5)cc4", "c1ccc(Oc2ccc(-c3cn(C4CCCC4)c4ncncc34)cc2)cc1", extra_atom_feature=True, extra_bond_feature=True)
