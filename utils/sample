@@ -1,0 +1,8 @@
+CHEMBL68920 Cc1cc(C)c(\C=C\2/C(=O)Nc3ncnc(Nc4ccc(F)c(Cl)c4)c23)[nH]1 5.949999999999999
+CHEMBL69638 Nc1ncnc2c1c(cn2C3CCCC3)c4cccc(Oc5ccccc5)c4 5.15
+CHEMBL419526 N(c1oc(cn1)c2ccccc2)c3ccccn3 5.73
+CHEMBL443268 CN1C(=O)\C(=C/c2[nH]c(cc2C)C(=O)NCCN3CCOCC3)\c4c(Nc5ccc(F)c(Cl)c5)ncnc14 5.140000000000001
+CHEMBL330621 Cc1ccc(Nc2ncc(s2)c3ccccc3)nc1 7.72
+CHEMBL304271 CCN(CC)CC(O)CNC(=O)c1cc(C)c(\C=C\2/C(=O)Nc3ncnc(Nc4ccc(F)c(Cl)c4)c23)[nH]1 7.895
+CHEMBL98896 N(c1cnccn1)c2ncc(s2)c3ccccc3 7.64
+CHEMBL98653 N(c1cccnc1)c2ncc(s2)c3ccccc3 6.62
