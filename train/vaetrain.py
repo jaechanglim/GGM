@@ -8,6 +8,7 @@ import numpy as np
 import torch
 import torch.multiprocessing as mp
 from torch.utils.data import DataLoader
+from tensorboardX import SummaryWriter
 
 from GGM.models.ggm import GGM
 from GGM.utils.data import GGMDataset, GGMSampler
@@ -51,6 +52,7 @@ def train(shared_model, optimizer, wholes, scaffolds, whole_conditions,
     """
     # each thread make new model
     model = GGM(args)
+    model.train()
     for idx in range(len(wholes)):
         # set parameters of model as same as that of reference model
         model.load_state_dict(shared_model.state_dict())
@@ -67,8 +69,10 @@ def train(shared_model, optimizer, wholes, scaffolds, whole_conditions,
 
         # train model
         g_gen, h_gen, loss1, loss2, loss3, loss4, loss_property = retval
+        loss1_beta = args.beta2 * loss1
+        loss2_beta = args.beta1 * loss2
         # torch.autograd.Variable of shape (1,)
-        loss = loss1 + loss2 * args.beta1 + loss3 + loss4
+        loss = loss1_beta + loss2_beta + loss3 + loss4
 
         retval_list[pid].append((loss.data.cpu().numpy(),
                                  loss1.data.cpu().numpy(),
@@ -117,6 +121,11 @@ if __name__ == '__main__':
                         help='beta1: lambda paramter for VAE training',
                         type=float,
                         default=5e-3)
+    parser.add_argument('--beta2',
+                        help='beta2: lambda paramter for reconstruction '
+                             'training',
+                        type=float,
+                        default=5e-2)
     parser.add_argument('--dropout',
                         help='dropout: dropout rate of property predictor',
                         type=float,
@@ -220,64 +229,72 @@ if __name__ == '__main__':
     # Sample active and inactive keys by the required ratio.
     else:
         sampler = GGMSampler(dataset,
-                             num_samples=len(dataset),
                              ratios=args.active_ratio)
         data = DataLoader(dataset,
                           batch_size=args.item_per_cycle,
                           sampler=sampler)
     data_iter = iter(data)
-    for epoch in range(args.num_epochs):
-        # Jump to the previous epoch for restart.
-        if epoch < initial_epoch:
-            continue
-        for cycle in range(num_cycles):
-            # Jump to the previous cycle for restart.
-            if epoch == initial_epoch:
-                if cycle < initial_cycle:
-                    continue
-            retval_list = mp.Manager().list()  # Is this needed?
-            # List of multiprocessing.managers.ListProxy to collect losses
-            retval_list = [mp.Manager().list() for i in range(args.ncpus)]
-            st = time.time()
-            processes = []
-            for pid in range(args.ncpus):
-                # Property (descriptor) values work as conditions.
-                # We need both of whole and scaffold values.
-                # whole_conditions := [
-                #     [ value1, value2, ... ],  # condition values of whole 1
-                #     [ value1, value2, ... ],  # condition values of whole 2
-                #     ... ]
-                _, wholes, scaffolds, conditions, masks = next(data_iter)
+    with SummaryWriter() as writer:
+        for epoch in range(args.num_epochs):
+            # Jump to the previous epoch for restart.
+            if epoch < initial_epoch:
+                continue
+            for cycle in range(num_cycles):
+                # Jump to the previous cycle for restart.
+                if epoch == initial_epoch:
+                    if cycle < initial_cycle:
+                        continue
+                retval_list = mp.Manager().list()  # Is this needed?
+                # List of multiprocessing.managers.ListProxy to collect losses
+                retval_list = [mp.Manager().list() for i in range(args.ncpus)]
+                st = time.time()
+                processes = []
+                for pid in range(args.ncpus):
+                    # Property (descriptor) values work as conditions.
+                    # We need both of whole and scaffold values.
+                    # whole_conditions := [
+                    #     [ value1, value2, ... ],  # condition values of whole 1
+                    #     [ value1, value2, ... ],  # condition values of whole 2
+                    #     ... ]
+                    try:
+                        _, wholes, scaffolds, conditions, masks = next(data_iter)
+                    except StopIteration:
+                        data_iter = iter(data)
+                        _, wholes, scaffolds, conditions, masks = next(data_iter)
+                    proc = \
+                        mp.Process(target=train,
+                                   args=(shared_model,
+                                         shared_optimizer,
+                                         wholes,
+                                         scaffolds,
+                                         conditions,
+                                         masks,
+                                         pid,
+                                         retval_list,
+                                         args))
+                    proc.start()
+                    processes.append(proc)
+                    time.sleep(0.1)
+                for proc in processes:
+                    proc.join()
+                end = time.time()
 
-                proc = \
-                    mp.Process(target=train,
-                               args=(shared_model,
-                                     shared_optimizer,
-                                     wholes,
-                                     scaffolds,
-                                     conditions,
-                                     masks,
-                                     pid,
-                                     retval_list,
-                                     args))
-                proc.start()
-                processes.append(proc)
-                time.sleep(0.1)
-            for proc in processes:
-                proc.join()
-            end = time.time()
+                # retval_list shape -> (ncpus, item_per_cycle, 4),
+                loss = np.mean(np.array([losses[0] for k in retval_list for losses in k]))
+                loss1 = np.mean(np.array([losses[1] for k in retval_list for losses in k]))
+                loss2 = np.mean(np.array([losses[2] for k in retval_list for losses in k]))
+                loss3 = np.mean(np.array([losses[3] for k in retval_list for losses in k]))
+                loss4 = np.mean(np.array([losses[4] for k in retval_list for losses in k]))
+                print ('%s\t%s\t%s\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f' %(epoch, cycle,
+                                                                    epoch*num_cycles+cycle, loss, loss1, loss2, loss3, loss4, end-st))
+                writer.add_scalars("loss/loss_group",
+                                   {"total": loss,
+                                    "reconstruction": loss1,
+                                    "vae": loss2,
+                                    "isomer": loss3,
+                                    "predict": loss4},
+                                   epoch*num_cycles+cycle)
 
-            # retval_list shape -> (ncpus, item_per_cycle, 4),
-            loss = np.mean(np.array([losses[0] for k in retval_list for losses in k]))
-            loss1 = np.mean(np.array([losses[1] for k in retval_list for losses in k]))
-            loss2 = np.mean(np.array([losses[2] for k in retval_list for losses in k]))
-            loss3 = np.mean(np.array([losses[3] for k in retval_list for losses in k]))
-            loss4 = np.mean(np.array([losses[4] for k in retval_list for losses in k]))
-            loss_property = np.mean(np.array([losses[5] for k in retval_list
-                                              for losses in k]), axis=0)
-            print ('%s\t%s\t%s\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f' %(epoch, cycle,
-                                                                epoch*num_cycles+cycle, loss, loss1, loss2, loss3, loss4, end-st))
-            print(loss_property)
-            if cycle%args.save_every == 0:
-                name = save_dir+'/save_'+str(epoch)+'_' + str(cycle)+'.pt'
-                torch.save(shared_model.state_dict(), name)
+                if cycle%args.save_every == 0:
+                    name = save_dir+'/save_'+str(epoch)+'_' + str(cycle)+'.pt'
+                    torch.save(shared_model.state_dict(), name)

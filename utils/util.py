@@ -1,10 +1,13 @@
 from collections import OrderedDict
 from operator import itemgetter
+import os
+import random
+import tempfile
 
 import numpy as np
 from rdkit import Chem
 from rdkit.Chem.EnumerateStereoisomers \
-import EnumerateStereoisomers, StereoEnumerationOptions
+    import EnumerateStereoisomers, StereoEnumerationOptions
 import torch
 import torch.nn as nn
 
@@ -13,6 +16,53 @@ N_atom_features = len(ATOM_SYMBOLS)
 N_bond_features = 5  # See `utils.bond_features`
 N_extra_atom_features = 5  # See `utils.atom_features` and `utils.make_graph`
 N_extra_bond_features = 6  # See `utils.bond_features`
+
+
+def dict_from_txt(path, dtype=None):
+    """
+    Generate a dict from a text file.
+
+    The structure of `path` should be
+
+        key1  value1_1  value1_2  ...
+        key2  value2_1  value2_2  ...
+        ...
+
+    and then the returned dict will be like
+
+        { key1:[value1_1, value1_2, ...], ... }
+
+    NOTE that the dict value will always be a list,
+    even if the number of elements is less than 2.
+
+    Parameters
+    ----------
+    path: str
+        A data text path.
+    dtype: type | None
+        The type of values (None means str).
+        Keys will always be str type.
+
+    Returns
+    -------
+    out_dict: dict[str, list[dtype]]
+    """
+    out_dict = {}
+    # np.genfromtxt or np.loadtxt are slower than pure Python!
+    with open(path) as f:
+        for line in f:
+            row = line.split()
+            values = []
+            for value in row[1:]:
+                if value == "None":
+                    values.append(None)
+                else:
+                    if dtype is None:
+                        values.append(value)
+                    else:
+                        values.append(dtype(value))
+            out_dict[row[0]] = values
+    return out_dict
 
 
 def initialize_model(model, load_save_file=False):
@@ -76,31 +126,6 @@ def one_hot(tensor, depth):
     ones = torch.sparse.torch.eye(depth)
     return ones.index_select(0, tensor.long())
 
-def probability_to_one_hot(tensor, stochastic = False):
-    """\
-    Convert a vector to one-hot of the same size.
-
-    If not stochastic, the one-hot index is argmax(tensor).
-    If stochastic, an index is randomly chosen
-    according to a probability proportional to each element.
-
-    Parameters
-    ----------
-    tensor: torch.autograd.Variable
-    stochastic: bool
-    """
-    if stochastic:
-        # Index-selection probability proportional to each element
-        prob = tensor.data.cpu().numpy().ravel().astype(np.float32)
-        prob = prob/np.sum(prob)
-        norm = np.sum(prob)
-        prob = [prob[i]/norm for i in range(len(prob))]
-        idx = int(np.random.choice(len(prob), 1, prob))
-    else:
-        idx = int(np.argmax(tensor.data.cpu().numpy()))
-    return create_var(one_hot(torch.FloatTensor([idx]), list(tensor.size())[-1] ))
-
-
 def collect_node_state(h, except_last=False):
     """Return a matrix made by concatenating the node vectors.
     Return shape -> (len(h), node_vector_length)    # if not except_last
@@ -122,8 +147,7 @@ def atom_features(atom, include_extra=False):
     """
     retval = one_of_k_encoding_unk(atom.GetSymbol(), ATOM_SYMBOLS)
     if include_extra:
-        retval += [#atom.GetDegree(),
-                   atom.GetFormalCharge()]
+        retval += [atom.GetDegree(), atom.GetFormalCharge()]
     return retval
 
 
@@ -184,16 +208,14 @@ def make_graph(smiles, extra_atom_feature = False, extra_bond_feature = False):
         molecule = Chem.MolFromSmiles(smiles)
     else:
         molecule = smiles
-    Chem.Kekulize(molecule)
-
     chiral_list = Chem.FindMolChiralCenters(molecule)
     chiral_index = [c[0] for c in chiral_list]
     chiral_tag = [c[1] for c in chiral_list]
     for i in range(0, molecule.GetNumAtoms()):
-        atom = molecule.GetAtomWithIdx(i)  # rdkit.Chem.Atom
-        if atom.GetSymbol() not in ATOM_SYMBOLS:
+        atom_i = molecule.GetAtomWithIdx(i)  # rdkit.Chem.Atom
+        if atom_i.GetSymbol() not in ATOM_SYMBOLS:
             return None, None
-        atom_i = atom_features(atom, extra_atom_feature)  # One-hot vector
+        atom_i = atom_features(atom_i, extra_atom_feature)  # One-hot vector
         if extra_atom_feature:
             if i in chiral_index:
                 if chiral_tag[chiral_index.index(i)] == 'R':
@@ -202,19 +224,18 @@ def make_graph(smiles, extra_atom_feature = False, extra_bond_feature = False):
                     atom_i += [0, 0, 1]
             else:
                 atom_i += [1, 0, 0]
-            atom_i.append(atom.GetIsAromatic())
-
         h[i] = create_var(torch.FloatTensor(atom_i), False).view(1, -1)
         for j in range(0, molecule.GetNumAtoms()):
             e_ij = molecule.GetBondBetweenAtoms(i, j)  # rdkit.Chem.Bond
-            if e_ij != None:
-                e_ij = list(map(lambda x: 1 if x == True else 0,
-                                bond_features(e_ij, extra_bond_feature)))  # ADDED edge feat; one-hot vector
+            if e_ij is not None:
+                # ADDED edge feat; one-hot vector
+                e_ij = list(map(lambda x: 1 if x else 0,
+                                bond_features(e_ij, extra_bond_feature)))
                 e_ij = create_var(torch.FloatTensor(e_ij).view(1, -1), False)
-                atom_j = molecule.GetAtomWithIdx(j)
+                # atom_j = molecule.GetAtomWithIdx(j) not used
                 if i not in g:
                     g[i] = []
-                g[i].append((e_ij, j))
+                g[i].append( (e_ij, j) )
     return g, h
 
 
@@ -234,28 +255,10 @@ def make_graphs(s1, s2, extra_atom_feature = False, extra_bond_feature = False):
         make_graph(Chem.Mol(molecule2), extra_atom_feature, extra_bond_feature)
     if g1 is None or h1 is None or g2 is None or h2 is None:
         return None, None, None, None
-
-    scaffold_index = molecule1.GetSubstructMatches(molecule2)
-    if len(scaffold_index) == 0:
+    try:
+        g1, h1 = index_rearrange(molecule1, molecule2, g1, h1)
+    except:
         return None, None, None, None
-    scaffold_index = list(scaffold_index[0])
-
-    g2 = OrderedDict({})
-    h2 = OrderedDict({})
-
-    for i in h1:
-        if i in scaffold_index:
-            h2[i] = deepcopy(h1[i])
-
-    for i in g1:
-        if i not in scaffold_index:
-            continue
-        else:
-            g2[i] = []
-        for edge in g1[i]:
-            if edge[1] in scaffold_index:
-                g2[i].append(deepcopy(edge))
-
     return g1, h1, g2, h2
 
 
@@ -397,25 +400,70 @@ def enumerate_molecule(s: str):
     return retval
 
 
-def initialize_model(model, load_save_file=False):
+def copy_ordered_dict(original):
+    copied = OrderedDict()
+    print(original.keys())
+    print(original.values())
+
+
+def probability_to_one_hot(tensor, stochastic = False):
     """\
+    Convert a vector to one-hot of the same size.
+
+    If not stochastic, the one-hot index is argmax(tensor).
+    If stochastic, an index is randomly chosen
+    according to a probability proportional to each element.
+
     Parameters
     ----------
-    model: ggm.ggm
-    load_save_file: str
-        File path of the save model.
+    tensor: torch.autograd.Variable
+    stochastic: bool
     """
-    if load_save_file:
-        model.load_state_dict(torch.load(load_save_file))
+    if stochastic:
+        # Index-selection probability proportional to each element
+        prob = tensor.data.cpu().numpy().ravel().astype(np.float64)
+        prob = prob/np.sum(prob)
+        norm = np.sum(prob)
+        prob = [prob[i]/norm for i in range(len(prob))]
+        idx = int(np.random.choice(len(prob), 1, p = prob))
     else:
-        for param in model.parameters():
-            if param.dim() == 1:
-                continue
-                nn.init.constant(param, 0)
-            else:
-                # nn.init.normal(param, 0.0, 0.15)
-                nn.init.xavier_normal(param)
-    return model
+        idx = int(np.argmax(tensor.data.cpu().numpy()))
+    return create_var(one_hot(torch.FloatTensor([idx]), list(tensor.size())[-1] ))
+
+def graph_to_smiles(g, h) -> str:
+    """Prepare atom symbols, bond orders and formal charges
+    and call `self.BO_to_smiles` to return a SMILES str."""
+    # Determine atom symbols by argmax of each node vector.
+    atomic_symbols = OrderedDict({})
+    for i in h.keys():
+        atomic_symbols[i] = ATOM_SYMBOLS[np.argmax(h[i].data.cpu().numpy())]
+
+    idx_to_atom = {i:k for i,k in enumerate(h.keys())}
+    atom_to_idx = {k:i for i,k in enumerate(h.keys())}
+
+    # Determine bond orders by argmax of each edge vector.
+    BO = np.zeros((len(atomic_symbols), len(atomic_symbols)))
+    for i in h.keys():
+        for j in range(len(g[i])):
+            BO[atom_to_idx[i],atom_to_idx[g[i][j][1]]] = \
+                np.argmax(g[i][j][0].data.cpu().numpy())+1
+    if not np.allclose(BO, BO.T, atol=1e-8):
+        print ('BO is not symmetry')
+        exit(-1)
+    fc_list = []
+    for i in range(len(atomic_symbols)):
+        for j in g[idx_to_atom[i]]:
+            bond = [(atomic_symbols[j[1]], BO[i][atom_to_idx[j[1]]]) \
+                for j in g[idx_to_atom[i]]]
+        fc = cal_formal_charge(atomic_symbols[idx_to_atom[i]], bond)
+        if fc!=0:
+            fc_list.append([i+1, fc])
+    #print (fc_list)
+    if len(fc_list)==0:
+        fc_list = None
+    smiles = BO_to_smiles(atomic_symbols, BO, fc_list)
+    return smiles
+
 
 def BO_to_smiles(atomic_symbols, BO, fc_list=None) -> str:
     """\
@@ -473,39 +521,6 @@ def BO_to_smiles(atomic_symbols, BO, fc_list=None) -> str:
         os.unlink(sdf_path)
     return s
 
-def graph_to_smiles(g, h) -> str:
-    """Prepare atom symbols, bond orders and formal charges
-    and call `self.BO_to_smiles` to return a SMILES str."""
-    # Determine atom symbols by argmax of each node vector.
-    atomic_symbols = OrderedDict({})
-    for i in h.keys():
-        atomic_symbols[i] = ATOM_SYMBOLS[np.argmax(h[i].data.cpu().numpy())]
-
-    idx_to_atom = {i:k for i,k in enumerate(h.keys())}
-    atom_to_idx = {k:i for i,k in enumerate(h.keys())}
-
-    # Determine bond orders by argmax of each edge vector.
-    BO = np.zeros((len(atomic_symbols), len(atomic_symbols)))
-    for i in h.keys():
-        for j in range(len(g[i])):
-            BO[atom_to_idx[i],atom_to_idx[g[i][j][1]]] = \
-                np.argmax(g[i][j][0].data.cpu().numpy())+1
-    if not np.allclose(BO, BO.T, atol=1e-8):
-        print ('BO is not symmetry')
-        exit(-1)
-    fc_list = []
-    for i in range(len(atomic_symbols)):
-        for j in g[idx_to_atom[i]]:
-            bond = [(atomic_symbols[j[1]], BO[i][atom_to_idx[j[1]]]) \
-                for j in g[idx_to_atom[i]]]
-        fc = cal_formal_charge(atomic_symbols[idx_to_atom[i]], bond)
-        if fc!=0:
-            fc_list.append([i+1, fc])
-    #print (fc_list)
-    if len(fc_list)==0:
-        fc_list = None
-    smiles = BO_to_smiles(atomic_symbols, BO, fc_list)
-    return smiles
 
 def cal_formal_charge(atomic_symbol, bonds) -> int:
     """\
@@ -528,8 +543,3 @@ def cal_formal_charge(atomic_symbol, bonds) -> int:
     #        return -1
 
     return 0
-
-def copy_ordered_dict(original):
-    copied = OrderedDict()
-    print(original.keys())
-    print(original.values())

@@ -8,12 +8,67 @@ from torch.utils.data.sampler import Sampler
 
 
 class GGMSampler(Sampler):
+
+    def __init__(self, dataset, ratios=None, replacement=True):
+        self.indicies = list(range(len(dataset)))
+        self.replacement = replacement
+        num_properties = dataset.N_properties
+
+        if ratios is None:
+            ratios = [[1, 1] for _ in range(num_properties)]
+
+        labels = list(range(2 ** num_properties))
+        label_to_ratio = [1.0] * len(labels)
+
+        label_to_count = [0] * len(labels)
+        id_to_label = {}
+        for id, _, __, condition, mask in dataset:
+            label = 0
+            for i in range(num_properties):
+                if mask[i] == 0:
+                    label += 2 ** i * 0
+                else:
+                    label += 2 ** i * 1
+            label_to_count[label] += 1
+            id_to_label[id] = label
+
+        print(label_to_count)
+
+        self.min_count = min(label_to_count)
+        self.max_count = max(label_to_count)
+
+        label_to_weight = \
+            [1.0 / count if count != 0 else 0 for count in
+             label_to_count]
+        for label, ratio in enumerate(label_to_ratio):
+            label_to_weight[label] *= ratio
+
+        self.weights = [label_to_weight[id_to_label[id]]
+                        for id in dataset.id_list]
+        self.weights = torch.tensor(self.weights, dtype=torch.double)
+
+    def __iter__(self):
+        """
+        return (self.indicies[i] for i in torch.multinomial(self.weights,
+                                                            self.num_samples,
+                                                            self.replacement))
+        """
+        return iter(torch.multinomial(self.weights,
+                                      2 * self.min_count,
+                                      self.replacement).tolist())
+
+    def __len__(self):
+        return self.num_samples
+
+
+
+class GGMBoundarySampler(Sampler):
     """
     ratios: [prop1:[None, Low, High], prop2: [None, Low, High] ... ]
     """
 
     def __init__(self, dataset, num_samples, ratios=None, boundaries=.5,
-                 replacement=True):
+                 replacement=False):
         self.indicies = list(range(len(dataset)))
         self.num_samples = num_samples
         self.replacement = replacement
@@ -269,12 +324,11 @@ class GGMDataset(Dataset):
 
 if __name__ == "__main__":
     ts = time.time()
-    dataset = GGMDataset("../data_egfr/id_smiles.txt",
-                         "../data_egfr/logp/data_normalized.txt",
-                         "../data_egfr/qed/data_normalized.txt")
-    sampler = GGMSampler(dataset, len(dataset))
+    dataset = GGMDataset("../data/ChEMBL+STOCK1S/id_smiles_train.txt",
+                         "../data/ChEMBL+STOCK1S/data_ChEMBL_train.txt")
+    sampler = GGMSampler(dataset, 3000)
     data = DataLoader(dataset,
-                      batch_size=10000,
+                      batch_size=1500,
                       sampler=sampler)
     te = time.time()
 
@@ -283,16 +337,15 @@ if __name__ == "__main__":
         sampled_batch = batch
         break
 
-    label_to_count = [0] * (3 ** 2)
+    label_to_count = [0] * (2 ** 1)
 
-    for i in range(len(batch[0])):
+
+    for i in range(len(sampled_batch[0])):
         label = 0
         for prop in range(2):
-            value = batch[3][prop][i].item()
-            if value > 0.5:
-                label += 3 ** prop * 1
-            else:
-                label += 3 ** prop * 2
+            value = sampled_batch[3][i][prop].item()
+            if not value < 0.00000001:
+                label += 2 ** prop * 1
         label_to_count[label] += 1
 
     print(label_to_count)

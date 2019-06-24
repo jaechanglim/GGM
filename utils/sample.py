@@ -8,11 +8,14 @@ import GGM.utils.util as util
 from GGM.models.ggm import GGM
 
 
-def normalize(v, max_v, min_v):
+def normalize(v, max_v=None, min_v=None):
     """v -> v' in [0, 1]"""
-    v = min(max_v, v)
-    v = max(min_v, v)
-    return (v - min_v) / (max_v - min_v)
+    if max_v is None and min_v is None:
+        return v
+    else:
+        v = min(max_v, v)
+        v = max(min_v, v)
+        return (v - min_v) / (max_v - min_v)
 
 
 def sample(shared_model, wholes, scaffolds, condition, pid, retval_list, args):
@@ -79,19 +82,25 @@ if __name__ == '__main__':
                         help='dimension of FC',
                         type=int,
                         default=128)
+    parser.add_argument('--dropout',
+                        help='dropout rate of property predictor',
+                        type=float,
+                        default=0.0)
     parser.add_argument('--save_fpath',
                         help='file path of saved model',
                         type=str)
     parser.add_argument('--scaffold',
                         help='smiles of scaffold',
                         type=str)
+    """
     parser.add_argument('--target_scaffold_properties',
                         help='values of target properties and scaffold properties',
                         nargs='+',
                         default=[],
                         type=float)
-    #parser.add_argument('--target_properties', help='values of target properties', nargs='+', default=[], type=float)
-    #parser.add_argument('--scaffold_properties', help='values of scaffold properties', nargs='+', default=[], type=float)
+    """
+    parser.add_argument('--target_properties', help='values of target properties', nargs='+', default=[], type=float)
+    parser.add_argument('--scaffold_properties', help='values of scaffold properties', nargs='+', default=[], type=float)
     parser.add_argument('--output_filename',
                         help='output file name',
                         type=str)
@@ -113,9 +122,13 @@ if __name__ == '__main__':
     # hyperparameters
     save_fpath = os.path.realpath(os.path.expanduser(args.save_fpath))
     output_filename = os.path.realpath(os.path.expanduser(args.output_filename))
-    
-    target_properties = [normalize(*values) for values in zip(args.target_properties, args.maximum_values, args.minimum_values)]
-    scaffold_properties = [normalize(*values) for values in zip(args.scaffold_properties, args.maximum_values, args.minimum_values)]
+
+    #target_properties = [normalize(*values) for values in zip(
+    #    args.target_properties, args.maximum_values, args.minimum_values)]
+    #scaffold_properties = [normalize(*values) for values in zip(
+    #    args.scaffold_properties, args.maximum_values, args.minimum_values)]
+    target_properties = args.target_properties
+    scaffold_properties = args.scaffold_properties
     target_scaffold_properties = target_properties + scaffold_properties
 
     # lines for multiprocessing
@@ -124,6 +137,7 @@ if __name__ == '__main__':
 
     # model
     args.N_conditions = len(target_scaffold_properties)
+    args.N_properties = len(target_properties)
     shared_model = GGM(args)
     shared_model.share_memory()
 
@@ -174,7 +188,7 @@ stochastic        : {args.stochastic}
     generations = [j[1] for k in retval_list for j in k]  # list of new SMILESs
 
     # Write the generated SMILES strings.
-    with open(args.output_filename, 'w') as output:
+    with open(args.output_filename, 'a') as output:
         output.write(scaffolds[0] + '\toriginal\tscaffold\n')
         for idx, smiles in enumerate(generations):
             output.write(smiles + '\t' + 'gen_' + str(idx) + '\n')
