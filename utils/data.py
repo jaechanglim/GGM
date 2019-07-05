@@ -16,10 +16,11 @@ class GGMSampler(Sampler):
 
         if ratios is None:
             ratios = [[1, 1] for _ in range(num_properties)]
-
-        labels = list(range(2 ** num_properties))
-        label_to_ratio = [1.0] * len(labels)
-
+            labels = list(range(2 ** num_properties))
+            label_to_ratio = [1.0] * len(labels)
+        else:
+            label_to_ratio = [[ratios, 1-ratios] for _ in range(num_properties)]
+            labels = list(range(2 ** num_properties))
         label_to_count = [0] * len(labels)
         id_to_label = {}
         for id, _, __, condition, mask in dataset:
@@ -41,8 +42,8 @@ class GGMSampler(Sampler):
             [1.0 / count if count != 0 else 0 for count in
              label_to_count]
         for label, ratio in enumerate(label_to_ratio):
-            label_to_weight[label] *= ratio
-
+            label_to_weight[label*2] *= ratio[0]
+            label_to_weight[label*2+1] *= ratio[1]
         self.weights = [label_to_weight[id_to_label[id]]
                         for id in dataset.id_list]
         self.weights = torch.tensor(self.weights, dtype=torch.double)
@@ -324,11 +325,13 @@ class GGMDataset(Dataset):
 
 if __name__ == "__main__":
     ts = time.time()
-    dataset = GGMDataset("../data/ChEMBL+STOCK1S/id_smiles_train.txt",
-                         "../data/ChEMBL+STOCK1S/data_ChEMBL_train.txt")
-    sampler = GGMSampler(dataset, 3000)
+    # dataset = GGMDataset("../data/ChEMBL+STOCK1S/id_smiles_train.txt",
+    #                      "../data/ChEMBL+STOCK1S/data_train.txt")
+    dataset = GGMDataset("../data/ChEMBL+STOCK1S/id_smiles_STOCK_train.txt",
+                         "../data/ChEMBL+STOCK1S/data_STOCK_train_1.txt")
+    sampler = GGMSampler(dataset, 0.91)
     data = DataLoader(dataset,
-                      batch_size=1500,
+                      batch_size=100000,
                       sampler=sampler)
     te = time.time()
 
@@ -339,10 +342,9 @@ if __name__ == "__main__":
 
     label_to_count = [0] * (2 ** 1)
 
-
     for i in range(len(sampled_batch[0])):
         label = 0
-        for prop in range(2):
+        for prop in range(1):
             value = sampled_batch[3][i][prop].item()
             if not value < 0.00000001:
                 label += 2 ** prop * 1
