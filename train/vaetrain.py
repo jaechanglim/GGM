@@ -210,6 +210,7 @@ if __name__ == '__main__':
     dim_of_edge_vector: {args.dim_of_edge_vector}
     dim_of_FC         : {args.dim_of_FC}
     beta1             : {args.beta1}
+    beta2             : {args.beta2}
     dropout           : {args.dropout}
     SMILES data path  : {smiles_path}
     Data directories  : {data_paths}

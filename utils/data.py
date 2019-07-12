@@ -189,13 +189,12 @@ class GGMDataset(Dataset):
         self.id_to_smiles = data[1]
         self.id_to_conditions = data[2]
         self.id_to_mask = data[3]
-
         self.N_conditions = 2 * self.N_properties
-
     def __len__(self):
         return len(self.id_list)
 
     def __getitem__(self, idx):
+        #idx = np.random.randint(0,100, 1)[0]
         id = self.id_list[idx]
         whole_smiles, scaffold_smiles = self.id_to_smiles[id]
         condition = np.float32(self.id_to_conditions[id])
