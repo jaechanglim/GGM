@@ -3,6 +3,7 @@ import os
 import re
 import time
 import sys
+import math
 
 import numpy as np
 import torch
@@ -13,7 +14,7 @@ from tensorboardX import SummaryWriter
 from GGM.models.ggm import GGM
 from GGM.utils.data import GGMDataset, GGMSampler
 import GGM.utils.util as util
-from GGM.shared_optim import SharedAdam
+from GGM.utils.shared_optim import SharedAdam
 
 
 def train(shared_model, optimizer, wholes, scaffolds, whole_conditions,
@@ -50,6 +51,7 @@ def train(shared_model, optimizer, wholes, scaffolds, whole_conditions,
     args: argparse.Namespace
         Delivers parameters from command arguments to the model.
     """
+
     # each thread make new model
     model = GGM(args)
     model.train()
@@ -60,27 +62,25 @@ def train(shared_model, optimizer, wholes, scaffolds, whole_conditions,
         optimizer.zero_grad()
 
         # forward
-        retval = model(wholes[idx], scaffolds[idx], whole_conditions[idx],
+        ret_val = model(wholes[idx], scaffolds[idx], whole_conditions[idx],
                        scaffold_conditions[idx], args.shuffle_order)
 
         # if retval is None, some error occured. it is usually due to invalid smiles
-        if retval is None:
+        if ret_val is None:
             continue
 
         # train model
-        g_gen, h_gen, loss1, loss2, loss3, loss4, loss_property = retval
-        loss1_beta = args.beta2 * loss1
-        loss2_beta = args.beta1 * loss2
+        g_gen, h_gen, rec_loss, vae_loss, isomer_loss, predict_loss = ret_val
+        rec_loss_beta = args.beta2 * rec_loss
+        vae_loss_beta = args.beta1 * vae_loss
         # torch.autograd.Variable of shape (1,)
-        loss = loss1_beta + loss2_beta + loss3 + loss4
-
-        retval_list[pid].append((loss.data.cpu().numpy(),
-                                 loss1.data.cpu().numpy(),
-                                 loss2.data.cpu().numpy(),
-                                 loss3.data.cpu().numpy(),
-                                 loss4.data.cpu().numpy(),
-                                 loss_property))
-        loss.backward()
+        total_loss = rec_loss_beta + vae_loss_beta + isomer_loss + predict_loss
+        retval_list[pid].append((total_loss.data.cpu().numpy(),
+                                 rec_loss.data.cpu().numpy(),
+                                 vae_loss.data.cpu().numpy(),
+                                 isomer_loss.data.cpu().numpy(),
+                                 predict_loss.data.cpu().numpy()))
+        total_loss.backward()
 
         # torch.nn.utils.clip_grad_norm(model.parameters(), 0.5)
         util.ensure_shared_grads(model, shared_model, True)
@@ -148,10 +148,14 @@ if __name__ == '__main__':
                         help='shuffle order or adding node and edge',
                         action='store_true')
     parser.add_argument('--active_ratio',
-                        help='active ratio in sampling (default: no matter)',
+                        help='active ratio in sampling, if active_ratio is x, ratio between labeled and unlabeled data'
+                             'is 1-x: x',
                         type=float)
     parser.add_argument('--save_fpath',
                         help='path of a saved model to restart')
+    parser.add_argument('--use_subscaffold',
+                        help='whether use subscaffold or not for training model',
+                        action='store_true' )
     args = parser.parse_args()
 
     # Process file/directory paths.
@@ -166,8 +170,8 @@ if __name__ == '__main__':
     # Load data.
     dataset = GGMDataset(smiles_path, *data_paths)
 
-    # Get the number of conditions as a hyperparameter.
-    # `args` delivers the hyperparameters to `ggm.ggm`.
+    # Get the number of conditions as a hyper parameter.
+    # `args` delivers the hyper parameters to `ggm.ggm`.
     args.N_properties = dataset.N_properties
     args.N_conditions = dataset.N_conditions
 
@@ -197,7 +201,7 @@ if __name__ == '__main__':
         shared_model = util.initialize_model(shared_model, False)
 
     num_cycles = int(len(dataset) / args.ncpus / args.item_per_cycle)
-
+    
     print(f"""\
     ncpus             : {args.ncpus}
     OMP_NUM_THREADS   : {os.environ.get('OMP_NUM_THREADS')}
@@ -215,7 +219,8 @@ if __name__ == '__main__':
     SMILES data path  : {smiles_path}
     Data directories  : {data_paths}
     Save directory    : {save_dir}
-    Save model every  : {args.save_every} cycles per epoch (Total {args.num_epochs * (num_cycles // args.save_every + 1)} models)
+    Save model every  : {args.save_every} cycles per epoch 
+                        (Total {args.num_epochs * (num_cycles // args.save_every + 1)} models)
     shuffle_order     : {args.shuffle_order}
     Restart from      : {save_fpath}
     """)
@@ -234,6 +239,7 @@ if __name__ == '__main__':
         data = DataLoader(dataset,
                           batch_size=args.item_per_cycle,
                           sampler=sampler)
+
     data_iter = iter(data)
     with SummaryWriter() as writer:
         for epoch in range(args.num_epochs):
@@ -281,21 +287,22 @@ if __name__ == '__main__':
                 end = time.time()
 
                 # retval_list shape -> (ncpus, item_per_cycle, 4),
-                loss = np.mean(np.array([losses[0] for k in retval_list for losses in k]))
-                loss1 = np.mean(np.array([losses[1] for k in retval_list for losses in k]))
-                loss2 = np.mean(np.array([losses[2] for k in retval_list for losses in k]))
-                loss3 = np.mean(np.array([losses[3] for k in retval_list for losses in k]))
-                loss4 = np.mean(np.array([losses[4] for k in retval_list for losses in k]))
-                print ('%s\t%s\t%s\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f' %(epoch, cycle,
-                                                                    epoch*num_cycles+cycle, loss, loss1, loss2, loss3, loss4, end-st))
+                loss = np.mean(np.array([losses[0] for k in retval_list for losses in k if losses[0] > 1e-10]))
+                rec_loss = np.mean(np.array([losses[1] for k in retval_list for losses in k if losses[1] > 1e-10]))
+                vae_loss = np.mean(np.array([losses[2] for k in retval_list for losses in k if losses[2] > 1e-10]))
+                isomer_loss = np.mean(np.array([losses[3] for k in retval_list for losses in k if losses[3] > 1e-10]))
+                predict_loss = np.mean(np.array([losses[4] for k in retval_list for losses in k if losses[4] > 1e-10]))
+                print('%s\t%s\t%s\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f' %
+                      (epoch, cycle, epoch*num_cycles+cycle, loss, rec_loss,
+                       vae_loss, isomer_loss, predict_loss, end-st))
                 writer.add_scalars("loss/loss_group",
                                    {"total": loss,
-                                    "reconstruction": loss1,
-                                    "vae": loss2,
-                                    "isomer": loss3,
-                                    "predict": loss4},
+                                    "reconstruction": rec_loss,
+                                    "vae": vae_loss,
+                                    "isomer": isomer_loss,
+                                    "predict": predict_loss},
                                    epoch*num_cycles+cycle)
-
-                if cycle%args.save_every == 0:
-                    name = save_dir+'/save_'+str(epoch)+'_' + str(cycle)+'.pt'
+                
+                if cycle % args.save_every == 0:
+                    name = save_dir + '/save_' + str(epoch) + '_' + str(cycle) + '.pt'
                     torch.save(shared_model.state_dict(), name)

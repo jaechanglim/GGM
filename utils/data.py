@@ -8,19 +8,18 @@ from torch.utils.data.sampler import Sampler
 
 
 class GGMSampler(Sampler):
-
     def __init__(self, dataset, ratios=None, replacement=True):
         self.indicies = list(range(len(dataset)))
         self.replacement = replacement
         num_properties = dataset.N_properties
 
         if ratios is None:
-            ratios = [[1, 1] for _ in range(num_properties)]
             labels = list(range(2 ** num_properties))
             label_to_ratio = [1.0] * len(labels)
         else:
             label_to_ratio = [[ratios, 1-ratios] for _ in range(num_properties)]
             labels = list(range(2 ** num_properties))
+
         label_to_count = [0] * len(labels)
         id_to_label = {}
         for id, _, __, condition, mask in dataset:
@@ -32,8 +31,6 @@ class GGMSampler(Sampler):
                     label += 2 ** i * 1
             label_to_count[label] += 1
             id_to_label[id] = label
-
-        print(label_to_count)
 
         self.min_count = min(label_to_count)
         self.max_count = max(label_to_count)
@@ -49,18 +46,12 @@ class GGMSampler(Sampler):
         self.weights = torch.tensor(self.weights, dtype=torch.double)
 
     def __iter__(self):
-        """
-        return (self.indicies[i] for i in torch.multinomial(self.weights,
-                                                            self.num_samples,
-                                                            self.replacement))
-        """
         return iter(torch.multinomial(self.weights,
                                       2 * self.min_count,
                                       self.replacement).tolist())
 
     def __len__(self):
         return self.num_samples
-
 
 
 class GGMBoundarySampler(Sampler):
@@ -112,16 +103,6 @@ class GGMBoundarySampler(Sampler):
             else:
                 raise NotImplementedError
 
-
-        """
-        for i in range(len(label_to_ratio)):
-            prob = 1
-            for j in range(num_properties):
-                ratio = self.ratios[j] if i//(2**j)%2==1 else 1-self.ratios[j]
-                prob *= ratio
-            self.label_to_ratio[i] = prob
-        """
-
         label_to_count = [0] * len(labels)
         id_to_label = {}
         for id, _, __, condition, mask in dataset:
@@ -136,8 +117,6 @@ class GGMBoundarySampler(Sampler):
                         label += 3 ** i * 2
             label_to_count[label] += 1
             id_to_label[id] = label
-
-        print(label_to_count)
 
         label_to_weight = \
             [1.0/count if count != 0 else 0 for count in
@@ -190,20 +169,16 @@ class GGMDataset(Dataset):
         self.id_to_conditions = data[2]
         self.id_to_mask = data[3]
         self.N_conditions = 2 * self.N_properties
+
     def __len__(self):
         return len(self.id_list)
 
     def __getitem__(self, idx):
-        #idx = np.random.randint(0,100, 1)[0]
         id = self.id_list[idx]
         whole_smiles, scaffold_smiles = self.id_to_smiles[id]
         condition = np.float32(self.id_to_conditions[id])
         mask = np.float32(self.id_to_mask[id])
-        return id, \
-               whole_smiles, \
-               scaffold_smiles, \
-               condition, \
-               mask
+        return id, whole_smiles, scaffold_smiles, condition, mask
 
     def load_data(self, smiles_path, *data_paths):
         """\
@@ -239,11 +214,14 @@ class GGMDataset(Dataset):
 
         Returns
         -------
+        id_list: list[smiles]
         id_to_smiles: dict[str, list[str]]
         id_to_whole_conditions: dict[str, list[float]]
-            { ID1: [whole_value_of_property1, whole_value_of_property2, ...], ... }
-        id_to_scaffold_conditions: dict[str, list[float]]
-            { ID1: [scaffold_value_of_property1, scaffold_value_of_property2, ...], ... }
+            { ID1: [whole_value_of_property1, whole_value_of_property2, ...,
+                    scaffold_value_of_property1, scaffold_value_of_property2, ...], ... }
+        id_to_mask: dict[str, list[int]]
+            { ID1: [whole_mask_of_property1, whole_mask_of_property2, ... ,
+                    scaffold_mask_of_property1, scaffold_mask_of_property2, ...] }
         """
         # {id:[whole_smiles, scaffold_smiles], ...}
         id_to_smiles = self.dict_from_txt(smiles_path)
@@ -270,10 +248,7 @@ class GGMDataset(Dataset):
                         scaffold_mask[i] = 1
             id_to_conditions[id] = whole_conditions + scaffold_conditions
             id_to_mask[id] = whole_mask + scaffold_mask
-        return id_list, \
-               id_to_smiles, \
-               id_to_conditions, \
-               id_to_mask
+        return id_list, id_to_smiles, id_to_conditions, id_to_mask
 
     def dict_from_txt(self, path, dtype=None):
         """
@@ -305,7 +280,6 @@ class GGMDataset(Dataset):
         out_dict: dict[str, list[dtype]]
         """
         out_dict = {}
-        # np.genfromtxt or np.loadtxt are slower than pure Python!
         with open(path) as f:
             for line in f:
                 row = line.split()
@@ -320,34 +294,3 @@ class GGMDataset(Dataset):
                             values.append(dtype(value))
                 out_dict[row[0]] = values
         return out_dict
-
-
-if __name__ == "__main__":
-    ts = time.time()
-    # dataset = GGMDataset("../data/ChEMBL+STOCK1S/id_smiles_train.txt",
-    #                      "../data/ChEMBL+STOCK1S/data_train.txt")
-    dataset = GGMDataset("../data/ChEMBL+STOCK1S/id_smiles_STOCK_train.txt",
-                         "../data/ChEMBL+STOCK1S/data_STOCK_train_1.txt")
-    sampler = GGMSampler(dataset, 0.91)
-    data = DataLoader(dataset,
-                      batch_size=100000,
-                      sampler=sampler)
-    te = time.time()
-
-    sampled_batch = None
-    for batch in data:
-        sampled_batch = batch
-        break
-
-    label_to_count = [0] * (2 ** 1)
-
-    for i in range(len(sampled_batch[0])):
-        label = 0
-        for prop in range(1):
-            value = sampled_batch[3][i][prop].item()
-            if not value < 0.00000001:
-                label += 2 ** prop * 1
-        label_to_count[label] += 1
-
-    print(label_to_count)
-

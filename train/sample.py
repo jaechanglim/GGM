@@ -24,9 +24,7 @@ def predict(shared_model, id, smiles, retval_dict, args):
 def sample(shared_model, wholes, scaffolds, condition, pid, retval_list, args):
     """\
     Target function for the multiprocessed sampling.
-
     Sampled SMILESs are collected by `retval_list`.
-
     Parameters
     ----------
     shared_model: torch.nn.Module
@@ -62,9 +60,9 @@ def sample(shared_model, wholes, scaffolds, condition, pid, retval_list, args):
                                   stochastic=args.stochastic)
             # retval = shared_model(s)
             if retval is None: continue
-            predicted_condition = model.predict_properties(retval)
+            condition_predict = model.predict_properties(retval)
             # Save the given whole SMILES and the new SMILES.
-            retval_list[pid].append((s1, retval, predicted_condition.item()))
+            retval_list[pid].append((s1, retval, condition_predict.item()))
 
 
 if __name__ == "__main__":
@@ -100,12 +98,6 @@ if __name__ == "__main__":
     parser.add_argument("--smiles_path",
                         help="path of file with molecules' id, whole smiles, and scaffold smiles",
                         type=str)
-    parser.add_argument("--scaffold_smiles",
-                        help="scaffold smiles",
-                        type=str)
-    parser.add_argument("--scaffold_property",
-                        help="scaffold property",
-                        type=float)
     parser.add_argument("--data_path",
                         help="path of file with molecules' id, whole property, and scaffold property",
                         type=str)
@@ -130,6 +122,8 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     depath = lambda path: os.path.realpath(os.path.expanduser(path))
+    smiles_path = depath(args.smiles_path)
+    data_path = depath(args.data_path)
     save_fpath = depath(args.save_fpath)
     output_filename = depath(args.output_filename)
 
@@ -148,7 +142,7 @@ if __name__ == "__main__":
     OMP_NUM_THREADS      : {os.environ.get('OMP_NUM_THREADS')}
     Sample per CPU       : {args.item_per_cycle} per CPU
     Num of generations   : {args.ncpus * args.item_per_cycle} per scaffold
-                            (Total {args.ncpus * args.item_per_cycle * args.num_scaffolds})
+                            (Total {args.ncpus * args.item_per_cycle} * number of scaffolds)
     Model path           : {save_fpath}
     Output path          : {output_filename}
     Smiles path          : {args.smiles_path}
@@ -161,35 +155,85 @@ if __name__ == "__main__":
     stochastic           : {args.stochastic}
     """)
 
-    scaffold_property = [args.scaffold_property]
-    target_property = [args.target_property]
-    scaffolds = [args.scaffold_smiles for i in range(args.item_per_cycle)]
-    wholes = [None for i in range(args.item_per_cycle)]
-    target_condition = target_property.copy()
-    scaffold_condition = scaffold_property.copy()
-    target_scaffold_condition = target_condition + scaffold_condition
+    id_to_smiles = util.dict_from_txt(smiles_path)
+    data_dict = util.dict_from_txt(data_path, float)
 
-    retval_list = [mp.Manager().list() for i in range(args.ncpus)]
-    st = time.time()
+    id_to_smiles_scaffolds = {}
+    id_to_smiles_wholes = {}
+    id_list = list(id_to_smiles.keys())
+
+    for id in id_list:
+        if id in data_dict.keys():
+            id_to_smiles_wholes[id] = id_to_smiles[id][0]
+            id_to_smiles_scaffolds[id] = id_to_smiles[id][1]
+
+    data_iter = iter(id_to_smiles_scaffolds.items())
     processes = []
-
-    for pid in range(args.ncpus):
-        proc = mp.Process(target=sample,
-                          args=(shared_model, wholes, scaffolds, target_scaffold_condition, pid, retval_list, args))
-        proc.start()
-        processes.append(proc)
-        time.sleep(0.1)
+    retval_dict = mp.Manager().dict()
+    done = False
+    while not done:
+        for pid in range(args.ncpus):
+            try:
+                id_smiles = next(data_iter)
+                proc = mp.Process(target=predict,
+                                  args=(shared_model, id_smiles[0], id_smiles[1], retval_dict, args))
+                proc.start()
+                processes.append(proc)
+            except StopIteration:
+                done = True
+                break
     for proc in processes:
         proc.join()
 
-    et = time.time()
+    id_candidates_list = list(filter(lambda id: args.min_scaffold_value <= retval_dict[id] <= args.max_scaffold_value,
+                                     retval_dict.keys()))
 
-    generations = [(j[1], j[2]) for k in retval_list for j in k]
-    with open(args.output_filename, 'w') as output:
-        output.write("ID SCAFFOLD PROPERTY DIFF\n")
-        output.write("{} {:.3f}\n".format(args.scaffold_smiles, scaffold_property[0]))
-        for idx, data in enumerate(generations):
-            generated_smiles, property = data
-            output.write("gen_{} {} {:.3f} {:.3f}\n".format(idx, generated_smiles, property,
-                                                   abs(property-scaffold_property[0])))
-        output.write("\n")
+    id_candidates = id_candidates_list if not args.num_scaffolds \
+        else random.sample(id_candidates_list, args.num_scaffolds) if len(id_candidates_list) >= args.num_scaffold \
+        else random.smaple(id_candidates_list, len(id_candidates_list))
+    # else "No sampling can be done, maximum number of scaffolds is {}".format(len(id_candidates_list))
+
+    id_to_property_scaffolds = {}
+    id_to_smiles_candidates = {}
+    for id in id_candidates:
+        id_to_property_scaffolds[id] = retval_dict[id]
+        id_to_smiles_candidates[id] = id_to_smiles_scaffolds[id]
+
+    for idx, (id, smiles) in enumerate(id_to_smiles_candidates.items()):
+        scaffold_property = id_to_property_scaffolds[id]
+        target_properties = [args.target_property]
+        scaffold_properties = [scaffold_property]
+        scaffolds = [smiles for i in range(args.item_per_cycle)]
+        wholes = [None for i in range(args.item_per_cycle)]
+        target_condition = target_properties.copy()
+        scaffold_condition = scaffold_properties.copy()
+        target_scaffold_condition = target_condition + scaffold_condition
+
+        retval_list = [mp.Manager().list() for i in range(args.ncpus)]
+        st = time.time()
+        processes = []
+
+        for pid in range(args.ncpus):
+            proc = mp.Process(target=sample,
+                              args=(shared_model, wholes, scaffolds, target_scaffold_condition, pid, retval_list, args))
+            proc.start()
+            processes.append(proc)
+            time.sleep(0.1)
+        for proc in processes:
+            proc.join()
+
+        et = time.time()
+
+        generations = [(j[1], j[2]) for k in retval_list for j in k]
+        with open(args.output_filename, 'a') as output:
+            if idx == 0:
+                output.write("Total scaffolds can be used for sampling: {}\n".format(len(id_candidates_list)))
+                output.write("Total scaffolds used for sampling: {}\n".format(len(id_candidates)))
+            output.write("ID SCAFFOLD PROPERTY DIFF\n")
+            output.write("{} {} {:.3f}\n".format(id, smiles, scaffold_property))
+            for idx, data in enumerate(generations):
+                generated_smiles, property = data
+                output.write("gen_{} {} {:.3f} {:.3f}\n".format(idx, generated_smiles, property,
+                                                       abs(property-scaffold_property)))
+            output.write("\n")
+

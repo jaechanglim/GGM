@@ -9,6 +9,12 @@ import tempfile
 import numpy as np
 from rdkit import Chem
 from rdkit.Chem.EnumerateStereoisomers import EnumerateStereoisomers, StereoEnumerationOptions
+from rdkit.Chem import BRICS
+from rdkit.Chem import Recap
+from rdkit.Chem.Descriptors import ExactMolWt
+from rdkit.Chem import AllChem
+from rdkit.Chem.Scaffolds.MurckoScaffold import MurckoScaffoldSmiles
+
 import torch
 from torch.autograd import Variable
 import torch.nn as nn
@@ -19,6 +25,7 @@ N_atom_features = len(ATOM_SYMBOLS)
 N_bond_features = 5  # See `utils.bond_features`
 N_extra_atom_features = 5  # See `utils.atom_features` and `utils.make_graph`
 N_extra_bond_features = 6  # See `utils.bond_features`
+
 def dict_from_txt(path, dtype=None):
     """
     Generate a dict from a text file.
@@ -65,6 +72,7 @@ def dict_from_txt(path, dtype=None):
             out_dict[row[0]] = values
     return out_dict
 
+
 def create_var(tensor, requires_grad=False): 
     """\
     create_var(...) -> torch.autograd.Variable
@@ -72,6 +80,7 @@ def create_var(tensor, requires_grad=False):
     Wrap a torch.Tensor object by torch.autograd.Variable.
     """
     return Variable(tensor, requires_grad=requires_grad)
+
 
 def one_of_k_encoding_unk(x, allowable_set):
     #"""Maps inputs not in the allowable set to the last element."""
@@ -86,6 +95,7 @@ def one_of_k_encoding_unk(x, allowable_set):
         return None
     return list(map(lambda s: int(x == s), allowable_set))
 
+
 def atom_features(atom, include_extra = False):
     """\
     atom_features(...) -> list[int]
@@ -97,6 +107,7 @@ def atom_features(atom, include_extra = False):
         retval += [#atom.GetDegree(),
                    atom.GetFormalCharge()]
     return retval
+
 
 def bond_features(bond, include_extra = False):
     """\
@@ -191,12 +202,14 @@ def make_graph(smiles, extra_atom_feature = False, extra_bond_feature = False):
                 g[i].append( (e_ij, j) )
     return g, h
 
+
 def sum_node_state(h):   
     """Return the element-wise sum of the node vectors."""
     retval = create_var(torch.zeros(h[0].size()))
     for i in list(h.keys()):
         retval+=h[i]
     return retval
+
 
 def average_node_state(h):   
     """Return the element-wise mean of the node vectors."""
@@ -207,6 +220,7 @@ def average_node_state(h):
     if len(h)>0:
         retval=retval/len(h)
     return retval
+
 
 def collect_node_state(h, except_last=False):   
     """Return a matrix made by concatenating the node vectors.
@@ -219,6 +233,7 @@ def collect_node_state(h, except_last=False):
     if except_last==False:
         retval.append(h[list(h.keys())[-1]])
     return torch.cat(retval, 0)
+
 
 def cal_formal_charge(atomic_symbol, bonds) -> int:
     """\
@@ -241,6 +256,7 @@ def cal_formal_charge(atomic_symbol, bonds) -> int:
     #        return -1
 
     return 0
+
 
 def graph_to_smiles(g, h) -> str:
     """Prepare atom symbols, bond orders and formal charges
@@ -275,6 +291,7 @@ def graph_to_smiles(g, h) -> str:
         fc_list = None
     smiles = BO_to_smiles(atomic_symbols, BO, fc_list)
     return smiles
+
 
 def BO_to_smiles(atomic_symbols, BO, fc_list=None) -> str:
     """\
@@ -332,6 +349,7 @@ def BO_to_smiles(atomic_symbols, BO, fc_list=None) -> str:
         os.unlink(sdf_path)
     return s
 
+
 def one_hot(tensor, depth):
     """\
     Return an one-hot vector given an index and length.
@@ -358,6 +376,7 @@ def is_equal_node_type(h1, h2):
         if not np.array_equal(h1[i].data.cpu().numpy(), h2[i].data.cpu().numpy()):
             return False
     return True
+
 
 def is_equal_edge_type(g1, g2):
     if len(g1)!=len(g2):
@@ -392,6 +411,7 @@ def ensure_shared_grads(model, shared_model, gpu=False):
                 continue
             shared_param._grad = param.grad.cpu()
 
+
 def probability_to_one_hot(tensor, stochastic = False):
     """\
     Convert a vector to one-hot of the same size.
@@ -415,6 +435,7 @@ def probability_to_one_hot(tensor, stochastic = False):
     else:
         idx = int(np.argmax(tensor.data.cpu().numpy()))
     return create_var(one_hot(torch.FloatTensor([idx]), list(tensor.size())[-1] ))
+
 
 def make_graphs(s1, s2, extra_atom_feature = False, extra_bond_feature = False):
     """\
@@ -457,6 +478,7 @@ def make_graphs(s1, s2, extra_atom_feature = False, extra_bond_feature = False):
 
     return g1, h1, g2, h2
 
+
 def index_rearrange(molecule1, molecule2, g, h):
     """\
     index_rearrange(...) -> edge_dict, node_dict
@@ -494,7 +516,8 @@ def index_rearrange(molecule1, molecule2, g, h):
             idx+=1
     g, h = index_change(g, h, new_index)
     return g, h
-        
+
+
 def index_change(g, h, new_index):
     """\
     index_change(...) -> edge_dict, node_dict
@@ -515,16 +538,20 @@ def index_change(g, h, new_index):
             new_g[new_index[i]].append((j[0], new_index[j[1]]))
     return new_g, new_h            
 
+
 def enumerate_molecule(s: str):
     """Return a list of all the isomer SMILESs of a given SMILES `s`."""
     m = Chem.MolFromSmiles(s) 
+    # print(m)
     opts = StereoEnumerationOptions(unique=True, onlyUnassigned=False)
     #opts = StereoEnumerationOptions(tryEmbedding=True, unique=True, onlyUnassigned=False)
-    isomers = tuple(EnumerateStereoisomers(m, options=opts)) 
+    isomers = tuple(EnumerateStereoisomers(m, options=opts))
+    # print(isomers) 
     retval = []
     for smi in sorted(Chem.MolToSmiles(x,isomericSmiles=True) for x in isomers):  
         retval.append(smi)
     return retval
+
 
 def initialize_model(model, load_save_file=False):
     """\
@@ -543,48 +570,8 @@ def initialize_model(model, load_save_file=False):
                 nn.init.constant(param, 0)
             else:
                 #nn.init.normal(param, 0.0, 0.15)
-                nn.init.xavier_normal(param)
-    return model    
-
-def dict_from_txt(path, dtype=None):
-    """\
-    Generate a dict from a text file.
-
-    The structure of `path` should be
-
-        key1  value1_1  value1_2  ...
-        key2  value2_1  value2_2  ...
-        ...
-
-    and then the returned dict will be like
-
-        { key1:[value1_1, value1_2, ...], ... }
-
-    NOTE that the dict value will always be a list,
-    even if the number of elements is less than 2.
-
-    Parameters
-    ----------
-    path: str
-        A data text path.
-    dtype: type | None
-        The type of values (None means str).
-        Keys will always be str type.
-
-    Returns
-    -------
-    out_dict: dict[str, list[dtype]]
-    """
-    out_dict = {}
-    # np.genfromtxt or np.loadtxt are slower than pure Python!
-    with open(path) as f:
-        for line in f:
-            row = line.split()
-            if dtype is None:
-                out_dict[row[0]] = row[1:]
-            else:
-                out_dict[row[0]] = [dtype(value) for value in row[1:]]
-    return out_dict
+                nn.init.xavier_normal_(param)
+    return model
 
 def load_data(smiles_path, *data_paths):
     """\
@@ -635,6 +622,7 @@ def load_data(smiles_path, *data_paths):
         id_to_scaffold_conditions[key] = [data_dict[key][1] for data_dict in data_dicts]
     return id_to_smiles, id_to_whole_conditions, id_to_scaffold_conditions
 
+
 def divide_data(id_to_conditions, boundaries=.5):
     """\
     Divide data by boundary values.
@@ -671,6 +659,7 @@ def divide_data(id_to_conditions, boundaries=.5):
             else:
                 low_keys[i].append(key)
     return high_keys, low_keys
+
 
 def sample_data(id_to_conditions, size, ratios=.5, boundaries=.5):
     """\
@@ -725,3 +714,65 @@ def sample_data(id_to_conditions, size, ratios=.5, boundaries=.5):
     keys.extend(random.choices(key_pool, k=size-len(keys)))
     random.shuffle(keys)
     return keys
+
+def ring_count(s):
+    m = Chem.MolFromSmiles(s)
+    ssr = Chem.GetSymmSSSR(m)
+    return len(ssr)
+
+def delete_atoms(m, indice):
+    m = Chem.RWMol(m)
+    indice = sorted(list(indice))
+    for i in range(len(indice)):
+        m.RemoveAtom(indice[i]-i)
+    return m
+
+def sub_scaffold(input_smiles):
+    input_m = Chem.MolFromSmiles(input_smiles)
+
+    #make scaffold pieces
+    #remove non-ring molecules
+    pieces = BRICS.BRICSDecompose(input_m)
+    pieces = [s for s in list(pieces) if ring_count(s)>0 ]
+
+    #remove dummy atoms
+    du = Chem.MolFromSmiles('*')
+    minimum_scaffold = []
+    for p in pieces:
+        m=AllChem.ReplaceSubstructs(Chem.MolFromSmiles(p),\
+                        du,Chem.MolFromSmiles('[H]'),True)[0]
+        m = Chem.RemoveHs(m)
+        minimum_scaffold.append(m)
+
+    # list of atom indice for substructure matching        
+    substruct_match_indice = [] 
+    for m in minimum_scaffold:
+        substruct_match_indice+=input_m.GetSubstructMatches(m)
+
+    #make intermediate scaffold by removing combination of pieces
+    intermediate_scaffolds = []
+    for i in range(pow(2,len(substruct_match_indice))):
+        rm_atom_indice = []
+        m = Chem.MolFromSmiles(input_smiles)
+        i_bin = list(bin(i)[2:].rjust(len(substruct_match_indice), '0'))
+        for j in range(len(i_bin)):
+            if i_bin[j]=='1': rm_atom_indice+=list(substruct_match_indice[j])
+
+        rm_atom_indice = list(set(rm_atom_indice))
+        m = delete_atoms(m, rm_atom_indice)
+        intermediate_scaffolds += Chem.MolToSmiles(m).split('.')
+
+    #make bemis-murcko scaffold from intermediate scaffolds
+    final_scaffolds = []
+    for r in intermediate_scaffolds:
+        try:
+            s = MurckoScaffoldSmiles(r)
+            if s=='': continue
+            m = Chem.MolFromSmiles(s)
+            if ExactMolWt(m)<200: continue
+            final_scaffolds.append(s)
+        except:
+            pass
+    final_scaffolds = sorted(list(set(final_scaffolds)))
+    return final_scaffolds
+

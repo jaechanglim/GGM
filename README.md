@@ -1,105 +1,156 @@
-# GGM 
-Graph generative model for molecules
+# GGM-SSVAE
+Graph generative model for molecules with semi-supervised variational autoencoder
 
 ### Required libraries
 - PyTorch
 - RDKit
 - OpenBabel (or an executable `babel`)
 - NumPy
-- Matplotlib (optional)
+- TensorbaordX
+- tqdm
+- sklearn
+- seaborn
+- pandas
 
-## Training command example
-Target properties = MW, logP, SAS
+## Package Installation Guide
+1. Make `setup.py` file to the root level directory.
+`setup.py` should contain the follows:
+    ```
+    from setuptools import setup, find_packages
+    setup(name='GGM', version='1.0', packages=find_packages())
+    ```
+2. Use a virtual environment.
 
+    If you already have virtual environment, go to #3.
+    - Create virtual env
+    ```
+    python -m venv venv
+    ```
+    - Activate virtual env
+    ```
+    source ./venv/bin/activate (Linux, macOS) or ./venv/Scripts/activate (Win)
+    ```
+    Once you have made and activated a virtual environment, your console should give the name of the virtual environment in parenthesis
+
+3. pip install your project in editable state.
+
+    Install your top level package `GGM` using `pip`.
+    
+    In the root directory, run
+    
+    `pip install -e .`(note the dot, it stands for "current directory")
+    
+    You can also see that it is installed by using `pip freeze`
+
+    ```
+    (GGM) -bash-4.2$ pip install -e .
+    Obtaining file:///your/root/directory
+    Installing collected packages: GGM
+      Running setup.py develop for GGM
+    Successfully installed GGM
+    (GGM) -bash-4.2$ pip freeze
+    # Editable install with no version control (GGM==1.0)
+    ```
+4. Now you can run all of these codes with `GGM.` imports!
+
+If you need more information about installing GGM as package, please visit
+https://stackoverflow.com/questions/6323860/sibling-package-imports/50193944#50193944.
+
+## Training model
+You can train model with train dataset. You can handle **sampling ratio**
+between labeled data and unlabeled data via `--active_ratio` . You can train
+with ratio between labeled data and unlabeled data 1:5 as follow: 
 ```
-python -u vaetrain.py \
-    --ncpus 16 \
-    --save_dir mw-logp-sas-0.1 \
-    --smiles_path data_egfr/id_smiles.txt \
-    --data_paths data_egfr/mw/data_normalized.txt data_egfr/logp/data_normalized.txt data_egfr/sas/data_normalized.txt \
-    --beta1 0.1 1> train.out 2> train.err
-```
-For **unconditional training**, omit `--data_paths`.
-
-Content of `train.out` after input information would be like this:
-```
-epoch   cyc     totcyc  loss    loss1   loss2   loss3   time
-0       0       0       26.472  26.154  0.084   0.234   51.823
-
-1       0       229     3.454   2.821   0.455   0.178   51.861
-
-2       0       458     2.622   2.071   0.413   0.138   51.802
-
-...
-
-16      0       3664    1.308   0.878   0.307   0.123   51.433
-
-17      0       3893    1.258   0.847   0.301   0.111   50.898
-```
-
-## Generation command example
-Target properties = MW, logP, SAS
-
-Target values = 310, 3, 4
-
-Scaffold values = 310.1, 3.2, 2.07
-
-Scaffold = "O=C(CSc1nnc(-c2ccccc2)[nH]1)Nc1ccccc1"
-```
-python sample.py \
-    --ncpus 16 \
-    --save_fpath "mw-logp-sas-0.1/save_10_10.pt" \
-    --output_filename "mw-logp-sas-0.1/4S00001_310_3_4.txt" \
-    --item_per_cycle 100 \
-    --scaffold "O=C(CSc1nnc(-c2ccccc2)[nH]1)Nc1ccccc1" \
-    --scaffold_properties 310.1 3.2 2.07 \
-    --target_properties 310 3 4 \
-    --minimum_values 200 0 0 \
-    --maximum_values 550 8 5 \
-    --stochastic
-```
-For **sampling using an unconditioned  model**, omit `--target_properties`, `--scaffold_properties`, `--minimum_values` and `--maximum_values`.
-
-
 OMP_NUM_THREADS=1 \
-python ./train/vaetrain.py \
---num_epochs 200 \
+python -u ./train/vaetrain.py \
+    --num_epochs 200 \
+    --ncpus 30 \
+    --smiles_path data/ChEMBL+STOCK/id_smiles_train.txt \
+    --data_paths data/ChEMBL+STOCK/data_train.txt \
+    --save_dir results/ChEMBL+STOCK/20190725T1311 \
+    --beta1 0.1 \
+    --beta2 1.0 \
+    --save_every 32 \
+    --active_ratio 0.833 > log/ChEMBL+STOCK/20190725T1311/ChEMBL1STOCK5_log.txt
+```
+Note: You can point tensorboard to the training loss result folder to
+monitor the training process as follow:
+```
+tensorboard --logdir ./runs
+```
+Note that Default name of directory composed with node name, starting time so you need to change it. 
+
+## Generate sample molecules
+### Generating molecules from scaffolds
+You can generate sample molecules with desired property value from scaffolds molecule with
+property value between `min_scaffold_value` and `max_scaffold_value` as follow:
+```
+OMP_NUM_THREADS=1 \
+python ./train/sample.py \
+--ncpus 20 \
+--item_per_cycle 5 \
+--smiles_path ./data/ChEMBL+STOCK/id_smiles_CHEMBL_test.txt \
+--data_path ./data/ChEMBL+STOCK/data_CHEMBL_test.txt \
+--min_scaffold_value 5 \
+--max_scaffold_value 6 \
+--target_property 8 \
+--save_fpath ./results/ChEMBL+STOCK/20190725T1311/save_20_0.pt \
+--output_filename ./samples/ChEMBL+STOCK/20190725T1311/ChEMBL_56to8_epoch20.txt \
+--stochastic \
+--num_scaffolds 100
+```
+Note: If `num_scaffolds` is larger than number of possible scaffolds that have property in range, 
+`num_scaffolds` automatically set to the number of scaffolds that have property value between
+`min_scaffold_value` and `max_scaffold_value`.
+
+Note that the number of generated molecules is `item_per_cycle * ncpus * num_scaffolds`.
+
+### Organization of generated molecule data
+You can simply organize the result file of generation as follow:
+```
+python ./utils/sample_organization.py \
+--input_filename ./samples/ChEMBL+STOCK/20190725T1311/ChEMBL_56to8_epoch20.txt \
+--output_filename ./samples/ChEMBL+STOCK/20190725T1311/ChEMBL_56to8_epoch20_organized.txt \
+--expected_generation 10000
+```
+Note: `expected_generation` is the value of number of generated molecule, same with 
+`item_per_cycle * ncpus * num_scaffolds` in molecule generation part.
+
+## Calculate each epoch's predict loss
+You can calculate the trained model's loss at the single epoch as follow:
+```
+OMP_NUM_THREADS=1 \
+python ./utils/predict_loss.py \
+--smiles_path ./data/ChEMBL/id_smiles_train.txt \
+--data_path ./data/ChEMBL/data_train.txt \
+--save_fpath ./results/ChEMBL+STOCK/20190725T1311/save_20_0.pt \
+--test_smiles_path ./data/ChEMBL/id_smiles_test.txt \
+--test_data_path ./data/ChEMBL/data_test.txt \
+--existing_result True
+```
+Note: Tensorboard MAE loss shows `MAE / sqrt(2.0)` which is tensorboard loss value of existing result.
+If you want to use your own result for loss calculation rather than existing result, set `--existing_result` to `False`.
+
+## Plotting loss change per epoch
+### Calculating multiple loss values from each epoch
+You can make file about loss changes as epoch number changes as follow:
+```
+OMP_NUM_THREADS=1 \
+python ./utils/predict_multiloss.py \
 --ncpus 30 \
---smiles_path data/ChEMBL+STOCK1S/id_smiles_train.txt \
---data_paths data/ChEMBL+STOCK1S/data_ChEMBL_train.txt \
---save_dir results/20190530T2237/ \
---beta1 0.1 \
---active_ratio 0.5
---dropout 0.5
+--save_dir ./results/ChEMBL+STOCK/20190725T1311 \
+--max_epoch 200 \
+--epoch_interval 10 \
+--output_filename ./results/loss_predict/ChEMBL1STOCK5.txt \
+--existing_result True
+```
 
-OMP_NUM_THREADS=1 \
-python ./train/vaetrain.py \
---num_epochs 10 \
---ncpus 15 \
---smiles_path data_egfr/id_smiles.txt \
---data_paths data_egfr/logp/data.txt \
---save_dir results/20190515T2023/ \
-
-
-python ./train/predict.py \
---smiles_path data/ChEMBL/id_smiles_test.txt \
---data_paths data/ChEMBL/data_normalized_test.txt \
---save_fpath results/20190522T0106/save_199_0.pt \
---dropout 0.7
-
-python ./train/predict.py \
---smiles_path data/ChEMBL/id_smiles_train.txt \
---data_paths data/ChEMBL/data_normalized_train.txt \
---save_fpath results/20190519T1500/save_16_0.pt \
---dropout 0.5
-
-python ./utils/sample.py \
---save_fpath results/20190522T0106/save_199_0.pt \
---scaffold "O=C1Nc2ncnc(Nc3ccccc3)c2/C1=C/c1ccc[nH]1" \
---target_properties 6.0 \
---scaffold_properties 5.9244 \
---output_filename "sample.txt" \
---minimum_values 0.0 \
---maximum_values 10.0
-
-util.make_graphs("Nc1ncnc2c1c(cn2C3CCC(O)C3)c4ccc(Oc5ccccc5)cc4", "c1ccc(Oc2ccc(-c3cn(C4CCCC4)c4ncncc34)cc2)cc1", extra_atom_feature=True, extra_bond_feature=True)
+### Plotting loss graph based on loss values
+You can make plot file with the file contains loss changes per epoch as follow: 
+```
+python ./utils/plot.py \
+--file_path ./results/loss_predict/ChEMBL1STOCK5.txt \
+--value_type mae
+```
+Note: Only mae, mse, r2 values can be plotted. You can see
+result png files in `file_path` directory.
