@@ -1,5 +1,7 @@
-# GGM 
-Graph generative model for molecules
+### Scaffold-based molecular design with a graph generative model
+by Jaechang Lim, Sang-Yeon Hwang, Seokhyun Moon, Seungsu Kim and Woo Youn Kim [journal] [[arXiv](https://arxiv.org/abs/1905.13639)].
+
+See [this branch](https://github.com/jaechanglim/GGM/tree/branch_feature_predictor_merging) for the semi-supervised version (Section 3.6).
 
 ### Required libraries
 - PyTorch
