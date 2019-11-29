@@ -17,8 +17,8 @@ Target properties = MW, logP, SAS
 python -u vaetrain.py \
     --ncpus 16 \
     --save_dir mw-logp-sas-0.1 \
-    --smiles_path data_egfr/id_smiles.txt \
-    --data_paths data_egfr/mw/data_normalized.txt data_egfr/logp/data_normalized.txt data_egfr/sas/data_normalized.txt \
+    --smiles_path data/id_smiles.txt \
+    --data_paths data/mw/data_normalized.txt data/logp/data_normalized.txt data/sas/data_normalized.txt \
     --beta1 0.1 1> train.out 2> train.err
 ```
 For **unconditional training**, omit `--data_paths`.
