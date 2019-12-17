@@ -1,5 +1,5 @@
 ### Scaffold-based molecular design with a graph generative model
-by [Jaechang Lim](https://github.com/jaechanglim), [Sang-Yeon Hwang](https://github.com/sangyeon-hwang), [Seokhyun Moon](https://github.com/mseok), [Seungsu Kim](https://github.com/SeungsuKim) and [Woo Youn Kim](https://aceteamkaist.wixsite.com/home), [*Chem. Sci.* 2020, Accepted Manuscript](https://doi.org/10.1039/C9SC04503A), [arXiv:1905.13639](https://arxiv.org/abs/1905.13639).
+by [Jaechang Lim](https://github.com/jaechanglim), [Sang-Yeon Hwang](https://github.com/sangyeon-hwang), [Seokhyun Moon](https://github.com/mseok), [Seungsu Kim](https://github.com/SeungsuKim) and [Woo Youn Kim](https://aceteamkaist.wixsite.com/home), [*Chem. Sci.* 2020, Advance Article](https://doi.org/10.1039/C9SC04503A), [arXiv:1905.13639](https://arxiv.org/abs/1905.13639).
 
 See [this branch](https://github.com/jaechanglim/GGM/tree/branch_feature_predictor_merging) for the semi-supervised version (Section 3.6).
 
